@@ -1,0 +1,576 @@
+{
+  "ai_analysis": [
+    {
+      "Field": "incident_number",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "root_cause",
+      "Type": "text"
+    },
+    {
+      "Field": "resolution_steps",
+      "Type": "longtext"
+    },
+    {
+      "Field": "suggested_sql",
+      "Type": "text"
+    },
+    {
+      "Field": "confidence_score",
+      "Type": "decimal(4,3)"
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp"
+    }
+  ],
+  "audit_logs": [
+    {
+      "Field": "id",
+      "Type": "int(11)"
+    },
+    {
+      "Field": "user_matricule",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "action",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "details",
+      "Type": "longtext"
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp"
+    }
+  ],
+  "chat_history": [
+    {
+      "Field": "id",
+      "Type": "int(11)"
+    },
+    {
+      "Field": "ticket_id",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "discussion_id",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "user_matricule",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "role",
+      "Type": "enum('user','assistant')"
+    },
+    {
+      "Field": "content",
+      "Type": "text"
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp"
+    }
+  ],
+  "database_fields": [
+    {
+      "Field": "id",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "type",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "length",
+      "Type": "int(11)"
+    },
+    {
+      "Field": "nullable",
+      "Type": "tinyint(1)"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    },
+    {
+      "Field": "tableId",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "createdAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "position",
+      "Type": "int(11)"
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "datetime(3)"
+    }
+  ],
+  "database_indexes": [
+    {
+      "Field": "id",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "isUnique",
+      "Type": "tinyint(1)"
+    },
+    {
+      "Field": "fields",
+      "Type": "varchar(500)"
+    },
+    {
+      "Field": "tableId",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "createdAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    }
+  ],
+  "database_tables": [
+    {
+      "Field": "id",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "path",
+      "Type": "varchar(500)"
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "schema",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    },
+    {
+      "Field": "createdAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "datetime(3)"
+    }
+  ],
+  "discussions": [
+    {
+      "Field": "id",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp"
+    }
+  ],
+  "kpi_configs": [
+    {
+      "Field": "id",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "kpiId",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "category",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "isEnabled",
+      "Type": "tinyint(1)"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    },
+    {
+      "Field": "order",
+      "Type": "int(11)"
+    },
+    {
+      "Field": "createdAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "sql_query",
+      "Type": "text"
+    }
+  ],
+  "menus": [
+    {
+      "Field": "id",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "title",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    },
+    {
+      "Field": "parentId",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "createdAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "icon",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "order",
+      "Type": "int(11)"
+    },
+    {
+      "Field": "path",
+      "Type": "varchar(500)"
+    }
+  ],
+  "predefined_queries": [
+    {
+      "Field": "id",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    },
+    {
+      "Field": "sql",
+      "Type": "text"
+    },
+    {
+      "Field": "category",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "minRole",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "isActive",
+      "Type": "tinyint(1)"
+    },
+    {
+      "Field": "connectionId",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "createdAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "datetime(3)"
+    }
+  ],
+  "sessions": [
+    {
+      "Field": "id",
+      "Type": "int(11)"
+    },
+    {
+      "Field": "token",
+      "Type": "text"
+    },
+    {
+      "Field": "user_matricule",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "expires_at",
+      "Type": "datetime"
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp"
+    }
+  ],
+  "tickets": [
+    {
+      "Field": "number",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "short_description",
+      "Type": "text"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    },
+    {
+      "Field": "state",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "priority",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "assignment_group",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "assigned_to",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "sys_class_name",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "sys_created_on",
+      "Type": "datetime"
+    },
+    {
+      "Field": "ref_incident_calendar_stc",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "ref_sc_request_calendar_stc",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "work_notes",
+      "Type": "text"
+    },
+    {
+      "Field": "work_notes_list",
+      "Type": "text"
+    },
+    {
+      "Field": "sla_due",
+      "Type": "datetime"
+    },
+    {
+      "Field": "made_sla",
+      "Type": "varchar(20)"
+    },
+    {
+      "Field": "time_worked",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "sys_updated_on",
+      "Type": "datetime"
+    },
+    {
+      "Field": "sys_updated_by",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "sys_mod_count",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "opened_by",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "opened_at",
+      "Type": "datetime"
+    },
+    {
+      "Field": "calendar_duration",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "due_date",
+      "Type": "datetime"
+    },
+    {
+      "Field": "closed_at",
+      "Type": "datetime"
+    },
+    {
+      "Field": "close_notes",
+      "Type": "text"
+    },
+    {
+      "Field": "closed_by",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "comments",
+      "Type": "text"
+    },
+    {
+      "Field": "business_service",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "sys_created_by",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "u_response_time",
+      "Type": "varchar(100)"
+    }
+  ],
+  "transactions": [
+    {
+      "Field": "id",
+      "Type": "varchar(191)"
+    },
+    {
+      "Field": "pgmType",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "sqlPg",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "tables",
+      "Type": "text"
+    },
+    {
+      "Field": "pgms",
+      "Type": "text"
+    },
+    {
+      "Field": "createdAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "datetime(3)"
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "description",
+      "Type": "text"
+    },
+    {
+      "Field": "language",
+      "Type": "varchar(50)"
+    }
+  ],
+  "users": [
+    {
+      "Field": "matricule",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "prenom",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "username",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "email",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "password",
+      "Type": "varchar(255)"
+    },
+    {
+      "Field": "role",
+      "Type": "enum('user','it_support','admin')"
+    },
+    {
+      "Field": "is_active",
+      "Type": "tinyint(1)"
+    },
+    {
+      "Field": "inactivated_at",
+      "Type": "datetime"
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp"
+    },
+    {
+      "Field": "updated_at",
+      "Type": "timestamp"
+    }
+  ],
+  "validated_incidents": [
+    {
+      "Field": "incident_number",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "validated_by",
+      "Type": "varchar(50)"
+    },
+    {
+      "Field": "incident_description",
+      "Type": "text"
+    },
+    {
+      "Field": "target_table",
+      "Type": "varchar(100)"
+    },
+    {
+      "Field": "final_solution",
+      "Type": "text"
+    },
+    {
+      "Field": "validated_at",
+      "Type": "timestamp"
+    }
+  ]
+}

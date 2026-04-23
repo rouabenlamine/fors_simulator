@@ -1,0 +1,10 @@
+CREATE TABLE `audit_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_matricule` varchar(50) DEFAULT NULL,
+  `action` varchar(100) NOT NULL,
+  `details` longtext DEFAULT NULL CHECK (json_valid(`details`)),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_user` (`user_matricule`),
+  CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_matricule`) REFERENCES `users` (`matricule`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
