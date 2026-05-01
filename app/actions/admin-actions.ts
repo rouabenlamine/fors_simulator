@@ -12,7 +12,7 @@ import { revalidatePath } from "next/cache";
 async function requireAdmin() {
   const session = await getSession();
   const role = session.user?.role as string;
-  if (!["admin", "superadmin"].includes(role)) throw new Error("Unauthorized.");
+  if (!["admin", "superadmin", "it_manager"].includes(role)) throw new Error("Unauthorized.");
   return session;
 }
 
@@ -39,7 +39,10 @@ export async function getAdminUsersAction() {
   const params: any[] = [];
 
   // SuperAdmin sees full directory. Admin sees only lower roles.
-  if (callerRole !== "superadmin") {
+  // Manager sees only IT Support.
+  if (callerRole === "it_manager") {
+    queryStr += " WHERE role = 'it_support'";
+  } else if (callerRole !== "superadmin") {
     queryStr += " WHERE role NOT IN ('admin', 'superadmin')";
   }
 
@@ -55,9 +58,14 @@ export async function createUserAction(data: {
   const session = await requireAdmin();
   const creator = session.user!.matricule;
 
-  // Admin cannot create admins or superadmins
-  if (["admin", "superadmin"].includes(data.role) && session.user!.role !== "superadmin") {
+  // Admin/Manager cannot create admins or superadmins
+  if (["admin", "superadmin"].includes(data.role) && !["superadmin"].includes(session.user!.role)) {
     throw new Error("Only superadmin can create administrative accounts.");
+  }
+
+  // Manager can only create IT Support users
+  if (session.user!.role === "it_manager" && data.role !== "it_support") {
+    throw new Error("Managers can only create IT Support users.");
   }
 
   // Hash password
@@ -90,14 +98,24 @@ export async function updateUserAction(matricule: string, data: {
   const [target] = await query<any>("SELECT role FROM users WHERE matricule = ?", [matricule]);
   if (!target) throw new Error("User not found.");
 
-  // Admin cannot update admins or superadmins
+  // Admin/Manager cannot update admins or superadmins
   if (["admin", "superadmin"].includes(target.role) && caller.role !== "superadmin") {
     throw new Error("Only superadmin can modify administrative accounts.");
+  }
+
+  // Manager can only update IT Support users
+  if (caller.role === "it_manager" && target.role !== "it_support") {
+    throw new Error("Managers can only manage IT Support users.");
   }
 
   // Admin cannot promote to admin or superadmin
   if (data.role && ["admin", "superadmin"].includes(data.role) && caller.role !== "superadmin") {
     throw new Error("Only superadmin can assign administrative roles.");
+  }
+
+  // Manager cannot change role to anything other than it_support
+  if (caller.role === "it_manager" && data.role && data.role !== "it_support") {
+    throw new Error("Managers can only assign IT Support role.");
   }
 
   const sets: string[] = [];
@@ -138,9 +156,14 @@ export async function deleteUserAction(matricule: string) {
   const [target] = await query<any>("SELECT role FROM users WHERE matricule = ?", [matricule]);
   if (!target) throw new Error("User not found.");
 
-  // Admins cannot delete admins or superadmins
+  // Admin/Manager cannot delete admins or superadmins
   if (["admin", "superadmin"].includes(target.role) && caller.role !== "superadmin") {
     throw new Error("Only superadmin can delete admin accounts.");
+  }
+
+  // Manager can only delete IT Support users
+  if (caller.role === "it_manager" && target.role !== "it_support") {
+    throw new Error("Managers can only delete IT Support users.");
   }
 
   // Prevent self-deletion
@@ -173,6 +196,10 @@ export async function toggleUserActiveAction(matricule: string) {
     throw new Error("Only superadmin can toggle admin account status.");
   }
 
+  if (caller.role === "it_manager" && user.role !== "it_support") {
+    throw new Error("Managers can only toggle IT Support users.");
+  }
+
   const newActive = user.is_active ? 0 : 1;
   await execute(
     "UPDATE users SET is_active = ?, inactivated_at = ? WHERE matricule = ?",
@@ -199,10 +226,23 @@ export async function toggleUserActiveAction(matricule: string) {
 export async function getAuditLogsAction(filters?: {
   userMatricule?: string; action?: string; dateFrom?: string; dateTo?: string; limit?: number;
 }) {
-  await requireAdmin();
+  const session = await getSession();
+  const role = session.user?.role;
+  if (!role || !["it_manager", "admin", "superadmin"].includes(role)) {
+    throw new Error("Unauthorized");
+  }
 
   const conditions: string[] = [];
   const params: any[] = [];
+
+  if (role === "it_manager") {
+    conditions.push(`(user_matricule IN (SELECT matricule FROM users WHERE role = 'it_support') 
+      OR details LIKE '%"team":"IT Support"%' 
+      OR details LIKE '%IT Support%')`);
+  } else if (role === "admin") {
+    // Admin sees everything except superadmin logs
+    conditions.push("user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')");
+  }
 
   if (filters?.userMatricule) {
     conditions.push("user_matricule LIKE ?");
@@ -619,43 +659,165 @@ export async function getSystemTableDataAction(tableName: string, limit: number 
 export async function getTeamKpisAction() {
   const session = await getSession();
   const role = session.user?.role;
-  if (!role || !["manager", "it_manager", "admin", "superadmin"].includes(role)) {
+  if (!role || !["it_manager", "admin", "superadmin", "it_report", "it_support"].includes(role)) {
     throw new Error("Unauthorized");
   }
 
   try {
-    // Get real KPI data from the database
-    const [totalTicketsRes] = await query<any>("SELECT COUNT(*) as count FROM tickets");
-    const [closedTicketsRes] = await query<any>("SELECT COUNT(*) as count FROM tickets WHERE state IN ('Closed', 'Validated')");
-    const [pendingTicketsRes] = await query<any>("SELECT COUNT(*) as count FROM tickets WHERE state NOT IN ('Closed', 'Validated', 'Canceled')");
-    const [rejectedTicketsRes] = await query<any>("SELECT COUNT(*) as count FROM tickets WHERE state = 'Rejected'");
-    const [canceledTicketsRes] = await query<any>("SELECT COUNT(*) as count FROM tickets WHERE state = 'Canceled'");
+    // Fetch custom KPIs configured in the database
+    let kpis = await query<any>("SELECT id, kpiId, name, category, description, sql_query FROM kpi_configs WHERE isEnabled = 1 AND sql_query IS NOT NULL AND sql_query != '' ORDER BY `order` ASC");
+    
+    // Self-healing: Fix known broken queries from user feedback
+    kpis = kpis.map(k => {
+      if (k.name === 'Validated AI Resolutions' && (!k.sql_query || k.sql_query.includes("IS NOT NULL"))) {
+        return { ...k, sql_query: "SELECT COUNT(*) as count FROM tickets WHERE state = 'Validated' AND number IN (SELECT incident_number FROM ai_analysis)" };
+      }
+      return k;
+    });
+    
+    const results = [];
+    
+    for (const kpi of kpis) {
+      try {
+        const data = await query<any>(kpi.sql_query);
+        // Determine if this is a single value or a series (for charts)
+        let type = "metric";
+        let value: any = 0;
+        let seriesData: any[] = [];
+        
+        if (data.length === 1) {
+          // Try to extract the first column's value
+          const keys = Object.keys(data[0]);
+          value = data[0][keys[0]];
+          
+          // Map the single row columns into seriesData so the details modal has insights
+          seriesData = Object.entries(data[0]).map(([k, v]) => ({ label: k, value: v }));
+        } else if (data.length > 1) {
+          type = "chart";
+          seriesData = data;
+        }
 
-    const totalTickets = totalTicketsRes?.count || 0;
-    const closedTickets = closedTicketsRes?.count || 0;
-    const openTickets = pendingTicketsRes?.count || 0;
-    const slaCompliance = totalTickets > 0 ? Math.round((closedTickets / totalTickets) * 100) : 0;
+        results.push({
+          id: kpi.id,
+          name: kpi.name,
+          category: kpi.category,
+          description: kpi.description,
+          type,
+          value,
+          seriesData
+        });
+      } catch (err: any) {
+        console.error(`Error executing KPI ${kpi.name}:`, err.message);
+        results.push({
+          id: kpi.id,
+          name: kpi.name,
+          category: kpi.category,
+          description: kpi.description,
+          type: "error",
+          error: err.message
+        });
+      }
+    }
 
-    return {
-      ticketsResolved: closedTickets,
-      openTickets,
-      slaBreaches: rejectedTicketsRes?.count || 0,
-      slaCompliance,
-      avgResolutionTime: "N/A",
-      avgResponseTime: "N/A",
-      customerSatisfaction: null,
-      firstCallResolution: null,
-      canceledTickets: canceledTicketsRes?.count || 0,
-    };
-  } catch {
-    return null;
+    // -- Add default Ticket-Oriented KPIs (Strictly scoped to IT Support) --
+    let whereClause = " WHERE assignment_group = 'IT Support'";
+
+    // 1. All Tickets Status (Chart)
+    try {
+      const stateRows = await query<any>(`SELECT state as Status, COUNT(*) as Count FROM tickets ${whereClause} GROUP BY state`);
+      
+      // Dynamic Mapping: Fix '1' to 'New' and ensure Title Case
+      const mappedStateRows = stateRows.map(row => {
+        let label = row.Status || "Unknown";
+        if (label === '1') label = "New";
+        // Ensure Title Case (e.g. "pending" -> "Pending")
+        label = label.charAt(0).toUpperCase() + label.slice(1);
+        return { ...row, Status: label };
+      });
+
+      if (mappedStateRows.length > 0) {
+        results.push({
+          id: "sys-ticket-dist",
+          name: "All Tickets Status",
+          category: "Ticket Operations",
+          description: "Live breakdown of all tickets in the system by their current status.",
+          type: "chart",
+          seriesData: mappedStateRows
+        });
+      }
+
+      // 2. Essential Metrics
+      const [totalRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${whereClause}`);
+      const [todayRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${whereClause ? whereClause + " AND" : "WHERE"} DATE(sys_created_on) = CURDATE()`);
+      const [closedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${whereClause ? whereClause + " AND" : "WHERE"} state IN ('Closed', 'Validated')`);
+      const [highPriorityRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${whereClause ? whereClause + " AND" : "WHERE"} priority IN ('1 - Critical', '2 - High') AND state NOT IN ('Closed', 'Validated', 'Canceled')`);
+      const [unassignedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${whereClause ? whereClause + " AND" : "WHERE"} assigned_to IS NULL AND state != 'Closed'`);
+      
+      results.push({
+        id: "sys-metric-total",
+        name: "Total Tickets",
+        category: "Volume",
+        description: "Total volume of tickets managed by the team.",
+        type: "metric",
+        value: totalRes?.c || 0,
+        seriesData: [{ label: "Total Tickets", count: totalRes?.c || 0 }]
+      });
+
+      results.push({
+        id: "sys-metric-today",
+        name: "Tickets Today",
+        category: "Volume",
+        description: "Number of new tickets created today.",
+        type: "metric",
+        value: todayRes?.c || 0,
+        seriesData: [{ label: "Tickets Today", count: todayRes?.c || 0 }]
+      });
+
+      results.push({
+        id: "sys-metric-closed",
+        name: "Tickets Solved",
+        category: "Performance",
+        description: "Total number of tickets successfully resolved and closed.",
+        type: "metric",
+        value: closedRes?.c || 0,
+        seriesData: [{ label: "Tickets Solved", count: closedRes?.c || 0 }]
+      });
+
+      results.push({
+        id: "sys-metric-critical",
+        name: "Critical Active Tickets",
+        category: "Ticket Operations",
+        description: "Tickets with High or Critical priority that require immediate attention.",
+        type: "metric",
+        value: highPriorityRes?.c || 0,
+        seriesData: [{ label: "Critical Tickets", count: highPriorityRes?.c || 0 }]
+      });
+
+      results.push({
+        id: "sys-metric-unassigned",
+        name: "Unassigned Tickets",
+        category: "Ticket Operations",
+        description: "Active tickets that have not yet been assigned to a support agent.",
+        type: "metric",
+        value: unassignedRes?.c || 0,
+        seriesData: [{ label: "Unassigned", count: unassignedRes?.c || 0 }]
+      });
+
+    } catch (e) {
+      console.error("Failed to inject default ticket charts:", e);
+    }
+
+    return results;
+  } catch (err) {
+    console.error("getTeamKpisAction error:", err);
+    return [];
   }
 }
 
 export async function getTeamMembersAction() {
   const session = await getSession();
   const role = session.user?.role;
-  if (!role || !["manager", "it_manager", "admin", "superadmin"].includes(role)) {
+  if (!role || !["it_manager", "admin", "superadmin"].includes(role)) {
     throw new Error("Unauthorized");
   }
 
@@ -663,8 +825,8 @@ export async function getTeamMembersAction() {
     // For IT Managers, show only IT support agents (team-scoped)
     // Admins/superadmins see all
     let whereClause = "";
-    if (role === "manager" || role === "it_manager") {
-      whereClause = "WHERE role IN ('it_support', 'user')";
+    if (role === "it_manager") {
+      whereClause = "WHERE role = 'it_support'";
     }
 
     const rows = await query<any>(
@@ -682,24 +844,31 @@ export async function getTeamMembersAction() {
 
 export async function getReportKpisAction() {
   try {
+    const session = await getSession();
+    const role = session.user?.role;
+    let groupFilter = "";
+    if (role === "it_manager") {
+      groupFilter = " WHERE assignment_group = 'IT Support'";
+    }
+
     // Core ticket metrics
-    const [totalRes] = await query<any>("SELECT COUNT(*) as c FROM tickets");
-    const [closedRes] = await query<any>("SELECT COUNT(*) as c FROM tickets WHERE state IN ('Closed', 'Validated')");
-    const [pendingRes] = await query<any>("SELECT COUNT(*) as c FROM tickets WHERE state NOT IN ('Closed', 'Validated', 'Canceled', 'Rejected')");
-    const [rejectedRes] = await query<any>("SELECT COUNT(*) as c FROM tickets WHERE state = 'Rejected'");
-    const [canceledRes] = await query<any>("SELECT COUNT(*) as c FROM tickets WHERE state = 'Canceled'");
-    const [sqlProposedRes] = await query<any>("SELECT COUNT(*) as c FROM tickets WHERE state = 'SQL Proposed'");
-    const [validatedRes] = await query<any>("SELECT COUNT(*) as c FROM tickets WHERE state = 'Validated'");
-    const [analysisPendingRes] = await query<any>("SELECT COUNT(*) as c FROM tickets WHERE state = 'Analysis Pending'");
+    const [totalRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets${groupFilter}`);
+    const [closedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state IN ('Closed', 'Validated')`);
+    const [pendingRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state NOT IN ('Closed', 'Validated', 'Canceled', 'Rejected')`);
+    const [rejectedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Rejected'`);
+    const [canceledRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Canceled'`);
+    const [sqlProposedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'SQL Proposed'`);
+    const [validatedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Validated'`);
+    const [analysisPendingRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Analysis Pending'`);
 
     // Priority distribution
     const priorityRows = await query<any>(
-      "SELECT priority, COUNT(*) as c FROM tickets GROUP BY priority ORDER BY priority"
+      `SELECT priority, COUNT(*) as c FROM tickets ${groupFilter} GROUP BY priority ORDER BY priority`
     );
 
     // Team distribution
     const teamRows = await query<any>(
-      "SELECT assignment_group as team, COUNT(*) as c FROM tickets GROUP BY assignment_group ORDER BY c DESC"
+      `SELECT assignment_group as team, COUNT(*) as c FROM tickets ${groupFilter} GROUP BY assignment_group ORDER BY c DESC`
     );
 
     // Monthly trend (last 6 months)
@@ -711,19 +880,32 @@ export async function getReportKpisAction() {
         SUM(CASE WHEN state = 'Rejected' THEN 1 ELSE 0 END) as rejected
       FROM tickets 
       WHERE sys_created_on >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+      ${groupFilter ? "AND assignment_group = 'IT Support'" : ""}
       GROUP BY DATE_FORMAT(sys_created_on, '%Y-%m')
       ORDER BY month ASC
     `);
 
     // AI analysis stats
-    const [aiAnalysisRes] = await query<any>("SELECT COUNT(*) as c FROM ai_analysis");
-    const [avgConfRes] = await query<any>("SELECT AVG(confidence_score) as avg_conf FROM ai_analysis WHERE confidence_score > 0");
+    const [aiAnalysisRes] = await query<any>(`
+      SELECT COUNT(*) as c FROM ai_analysis a
+      ${groupFilter ? "JOIN tickets t ON t.number = a.incident_number WHERE t.assignment_group = 'IT Support'" : ""}
+    `);
+    const [avgConfRes] = await query<any>(`
+      SELECT AVG(confidence_score) as avg_conf FROM ai_analysis a
+      ${groupFilter ? "JOIN tickets t ON t.number = a.incident_number WHERE t.assignment_group = 'IT Support' AND" : "WHERE"} confidence_score > 0
+    `);
 
     // Users count
-    const [usersRes] = await query<any>("SELECT COUNT(*) as c FROM users");
+    const [usersRes] = await query<any>(`
+      SELECT COUNT(*) as c FROM users ${role === 'it_manager' ? "WHERE role = 'it_support'" : ""}
+    `);
 
     // Active sessions
-    const [sessionsRes] = await query<any>("SELECT COUNT(*) as c FROM sessions WHERE expires_at > NOW()");
+    const [sessionsRes] = await query<any>(`
+      SELECT COUNT(*) as c FROM sessions s
+      JOIN users u ON u.matricule = s.user_matricule
+      WHERE expires_at > NOW() ${role === 'it_manager' ? "AND u.role = 'it_support'" : ""}
+    `);
 
     return JSON.parse(JSON.stringify({
       totalTickets: totalRes?.c || 0,

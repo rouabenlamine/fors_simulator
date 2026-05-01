@@ -19,35 +19,36 @@ export function SQLProposal({ sql }: SQLProposalProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <div className="bg-slate-900/90 backdrop-blur-xl rounded-[1.5rem] border border-slate-700/60 shadow-[0_8px_30px_rgb(0,0,0,0.2)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(99,102,241,0.2)] transition-all duration-300">
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="px-5 py-4 border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm relative z-10">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-md flex items-center justify-center">
-              <Code2 className="w-3.5 h-3.5 text-white" />
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <Code2 className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-slate-800">SQL Solution</span>
+            <span className="text-[15px] font-black text-white tracking-tight">SQL Solution</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-              <Shield className="w-3 h-3" />
+            <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest uppercase text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-lg shadow-sm">
+              <Shield className="w-3.5 h-3.5" />
               <span>DBA approval required</span>
             </div>
             <button
               onClick={handleCopy}
-              className="text-[11px] flex items-center gap-1 text-slate-500 hover:text-blue-600 transition-colors"
+              className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700"
             >
-              <Copy className="w-3 h-3" />
+              <Copy className="w-3.5 h-3.5" />
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
         </div>
-      </CardHeader>
-      <CardBody>
-        <pre className="text-xs text-emerald-400 font-mono bg-gray-900 rounded-xl p-4 overflow-x-auto leading-relaxed whitespace-pre-wrap border border-gray-800 shadow-inner">
+      </div>
+      <div className="p-5 relative z-10">
+        <pre className="text-[13px] text-indigo-200 font-mono font-medium bg-slate-950/50 rounded-xl p-5 overflow-x-auto leading-relaxed whitespace-pre-wrap border border-slate-800 shadow-inner">
           {sql}
         </pre>
-      </CardBody>
-    </Card>
+      </div>
+    </div>
   );
 }

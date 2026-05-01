@@ -1,4 +1,4 @@
-export type UserRole = "agent" | "reporter" | "manager" | "admin" | "superadmin" | "user" | "it_support";
+export type UserRole = "it_support" | "it_report" | "it_manager" | "admin" | "superadmin" | "user";
 
 export interface User {
   matricule: string;

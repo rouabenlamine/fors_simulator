@@ -6,28 +6,22 @@ import type { UserRole } from "./lib/types";
 
 const PUBLIC_PATHS = ["/login", "/admin/login", "/fors/auth/login", "/fors/auth/logout", "/api/tickets", "/api/analyze", "/api/ai-analysis", "/api/migrate"];
 
-// New updated VALID_ROLES include admin and superadmin
-const VALID_ROLES = ["agent", "reporter", "manager", "admin", "superadmin", "user", "it_support", "it_report", "it_manager"];
+const VALID_ROLES = ["admin", "superadmin", "it_support", "it_report", "it_manager"];
 
-// Default homes based on role — Updated: IT Manager goes to activity (not tables)
 const ROLE_HOME: Record<string, string> = {
-  agent: "/tickets",
-  reporter: "/report",
-  manager: "/activity",
   admin: "/admin/dashboard",
   superadmin: "/superadmin/dashboard",
-  user: "/tickets",
   it_support: "/tickets",
   it_report: "/report",
   it_manager: "/activity"
 };
 
 const RESTRICTED: { prefix: string; roles: string[] }[] = [
-  { prefix: "/report", roles: ["reporter", "it_report"] },
+  { prefix: "/report", roles: ["it_report"] },
   { prefix: "/tables", roles: ["admin", "superadmin"] },
-  { prefix: "/database", roles: ["manager", "it_manager", "agent", "superadmin"] },
-  { prefix: "/users", roles: ["manager", "it_manager", "admin", "superadmin"] },
-  { prefix: "/kpi-config", roles: ["manager", "it_manager", "admin", "superadmin"] },
+  { prefix: "/database", roles: ["it_manager", "it_support", "admin", "superadmin"] },
+  { prefix: "/users", roles: ["it_manager", "admin", "superadmin"] },
+  { prefix: "/kpi-config", roles: ["it_manager", "admin", "superadmin"] },
   { prefix: "/admin/view-control", roles: ["admin", "superadmin"] },
 ];
 
@@ -107,7 +101,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (AGENT_ONLY_PREFIXES.some((p) => pathname.startsWith(p))) {
-    if (["reporter", "manager", "it_report", "it_manager"].includes(role)) {
+    if (["it_report", "it_manager"].includes(role)) {
       const url = req.nextUrl.clone();
       url.pathname = ROLE_HOME[role] || "/tickets";
       return NextResponse.redirect(url);

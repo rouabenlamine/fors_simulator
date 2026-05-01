@@ -437,19 +437,20 @@ export default function LabPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans selection:bg-violet-200 selection:text-violet-900 relative">
+    <div className="min-h-screen bg-transparent flex flex-col font-sans selection:bg-violet-200 selection:text-violet-900 relative">
       <div className="max-w-4xl w-full mx-auto px-6 py-8 relative z-10">
 
         {/* Out-of-card Title */}
-        <div className="mb-6 flex items-center gap-3 ml-2">
-          <FlaskConical className="w-6 h-6 text-slate-800" />
-          <div>
-            <h1 className="text-[22px] leading-tight font-black text-slate-900">
-              Analysis Lab
-            </h1>
-            <p className="text-[13px] font-bold text-slate-500 mt-0.5">
-              Explore how AI would diagnose and resolve incidents
-            </p>
+        <div className="p-6 max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-sm">
+              <FlaskConical className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Analysis Lab</h2>
+              <p className="text-sm text-slate-400">Enter your Ticket and Let AI diagnose and resolve it</p>
+            </div>
           </div>
         </div>
 
@@ -848,7 +849,7 @@ export default function LabPage() {
                     icon={MessageSquare}
                     className={`h-14 px-8 rounded-2xl text-[14px] ${decision !== 'idle' ? 'flex-1' : ''}`}
                   >
-                     CHAT WITH AI
+                    CHAT WITH AI
                   </ActionButton>
                 </div>
 

@@ -1,16 +1,22 @@
 import "server-only";
 import mysql from 'mysql2/promise';
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
+const poolConfig = {
+    host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT) || 3306,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'fors_simulator',
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 20, // Increased for better concurrency
     queueLimit: 0,
-});
+};
+
+// Singleton pattern for Next.js HMR
+const globalForDb = global as unknown as { pool: mysql.Pool };
+const pool = globalForDb.pool || mysql.createPool(poolConfig);
+
+if (process.env.NODE_ENV !== 'production') globalForDb.pool = pool;
 
 export async function query<T>(sql: string, params?: any[]): Promise<T[]> {
     const [rows] = await pool.query(sql, params);
@@ -65,14 +71,74 @@ export function generateId(prefix: string = "ANALYSIS"): string {
 
 export default pool;
 
-// Auto-migrate to ensure impacted_tables column exists
+// Auto-migrate to ensure necessary tables exist
 (async () => {
     try {
-        await pool.query("ALTER TABLE ai_analysis ADD COLUMN impacted_tables TEXT");
-        console.log("[DB] Successfully added impacted_tables column to ai_analysis");
-    } catch (err: any) {
-        if (err.code !== "ER_DUP_FIELDNAME") {
-            // It's fine if it already exists
+        // 1. impacted_tables column
+        try {
+            await pool.query("ALTER TABLE ai_analysis ADD COLUMN impacted_tables TEXT");
+            console.log("[DB] Successfully added impacted_tables column to ai_analysis");
+        } catch (err: any) {
+            if (err.code !== "ER_DUP_FIELDNAME") { /* ignore */ }
         }
+
+        // 2. Audit Logs
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_matricule VARCHAR(50),
+                action VARCHAR(100),
+                details LONGTEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 3. Transactions
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS transactions (
+                id VARCHAR(50) PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                pgmType VARCHAR(100),
+                language VARCHAR(100),
+                sqlPg TEXT,
+                tables TEXT,
+                pgms TEXT,
+                createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+                updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+            )
+        `);
+
+        // 4. Menus
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS menus (
+                id VARCHAR(50) PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                parentId VARCHAR(50),
+                icon VARCHAR(100),
+                path VARCHAR(255),
+                \`order\` INT DEFAULT 0,
+                createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+                updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+            )
+        `);
+
+        // 5. Database Tables Metadata
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS database_tables (
+                id VARCHAR(50) PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                path VARCHAR(255),
+                \`schema\` TEXT,
+                createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+                updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+            )
+        `);
+
+        console.log("[DB] Schema initialization check complete.");
+    } catch (err) {
+        console.error("[DB] Critical initialization error:", err);
     }
 })();

@@ -26,59 +26,60 @@ export function TicketAnalysis({ analysis }: TicketAnalysisProps) {
   return (
     <div className="space-y-4">
       {/* Root Cause */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-md flex items-center justify-center">
-              <Bot className="w-3.5 h-3.5 text-white" />
+      <div className="bg-white/80 backdrop-blur-xl rounded-[1.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(37,99,235,0.15)] transition-all duration-300">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="px-5 py-4 border-b border-white/40 bg-white/30 backdrop-blur-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <Bot className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-slate-800">Root Cause Analysis</span>
+            <span className="text-[15px] font-black text-slate-800 tracking-tight">Root Cause Analysis</span>
           </div>
-        </CardHeader>
-        <CardBody>
-          <div className={`flex items-start gap-2 p-3 rounded-lg ${urgencyColors[analysis.urgency]}`}>
-            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-            <p className="text-sm font-medium">{analysis.rootCause}</p>
+        </div>
+        <div className="p-5 relative z-10">
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-gradient-to-br from-red-50 to-rose-50 border border-red-100/50 shadow-inner">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-red-500 drop-shadow-sm" />
+            <p className="text-sm font-semibold text-red-800 leading-relaxed">{analysis.rootCause}</p>
           </div>
-
-        </CardBody>
-      </Card>
+        </div>
+      </div>
 
       {/* Impacted Tables */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-orange-500 to-amber-600 rounded-md flex items-center justify-center">
-              <Database className="w-3.5 h-3.5 text-white" />
+      <div className="bg-white/80 backdrop-blur-xl rounded-[1.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(249,115,22,0.15)] transition-all duration-300">
+        <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="px-5 py-4 border-b border-white/40 bg-white/30 backdrop-blur-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
+              <Database className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-slate-800">Impacted Tables</span>
+            <span className="text-[15px] font-black text-slate-800 tracking-tight">Impacted Tables</span>
           </div>
-        </CardHeader>
-        <CardBody className="space-y-2">
+        </div>
+        <div className="p-5 space-y-3 relative z-10">
           {analysis.impactedTables.map((table) => {
-            const barColor = table.confidence >= 90 ? "#22c55e" : table.confidence >= 70 ? "#3b82f6" : "#f97316";
+            const barColor = table.confidence >= 90 ? "#10b981" : table.confidence >= 70 ? "#3b82f6" : "#f97316";
             return (
-              <div key={table.name} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                <div className="flex items-center gap-2">
-                  <code className="text-xs text-orange-600 font-mono font-bold">{table.name}</code>
+              <div key={table.name} className="flex items-center justify-between p-3.5 bg-white/50 backdrop-blur-sm rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow group/item">
+                <div className="flex items-center gap-3">
+                  <code className="text-[13px] text-orange-600 font-mono font-black">{table.name}</code>
                   {table.lossRate && (
-                    <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold border border-red-200">
+                    <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-md font-black tracking-widest shadow-sm">
                       {table.lossRate}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   {table.lostDays && (
-                    <span className="text-[10px] text-slate-500 font-medium">-{table.lostDays}d</span>
+                    <span className="text-[11px] text-slate-500 font-bold">-{table.lostDays}d</span>
                   )}
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="flex items-center gap-2">
+                    <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
                       <div
-                        className="h-full rounded-full"
+                        className="h-full rounded-full shadow-[0_0_8px_rgba(255,255,255,0.5)]"
                         style={{ width: `${table.confidence}%`, backgroundColor: barColor }}
                       />
                     </div>
-                    <span className="text-[10px] font-semibold" style={{ color: barColor }}>
+                    <span className="text-[11px] font-black w-8 text-right" style={{ color: barColor }}>
                       {table.confidence}%
                     </span>
                   </div>
@@ -86,23 +87,26 @@ export function TicketAnalysis({ analysis }: TicketAnalysisProps) {
               </div>
             );
           })}
-        </CardBody>
-      </Card>
+        </div>
+      </div>
 
       {/* Recommendation */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-green-500 to-emerald-600 rounded-md flex items-center justify-center">
-              <CheckCircle className="w-3.5 h-3.5 text-white" />
+      <div className="bg-white/80 backdrop-blur-xl rounded-[1.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(16,185,129,0.15)] transition-all duration-300">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="px-5 py-4 border-b border-white/40 bg-white/30 backdrop-blur-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <CheckCircle className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-slate-800">Recommended Solution</span>
+            <span className="text-[15px] font-black text-slate-800 tracking-tight">Recommended Solution</span>
           </div>
-        </CardHeader>
-        <CardBody>
-          <p className="text-sm text-slate-600 leading-relaxed">{analysis.recommendation}</p>
-        </CardBody>
-      </Card>
+        </div>
+        <div className="p-5 relative z-10">
+          <div className="bg-emerald-50/50 backdrop-blur-sm border border-emerald-100 rounded-xl p-5 shadow-inner">
+            <p className="text-sm font-semibold text-slate-700 leading-relaxed">{analysis.recommendation}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

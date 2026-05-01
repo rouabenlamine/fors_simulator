@@ -1,17 +1,24 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo } from "react";
+import { useState, useEffect, Suspense, useMemo, useCallback, startTransition, type FormEvent, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   getExplorerMenus,
   getExplorerTables,
   getExplorerTransactions,
   getTransactions,
+  addMenuAction,
+  addTableAction,
+  addTransactionAction,
+  addFieldAction,
+  addIndexAction,
 } from "@/app/actions";
+import { getMyRoleAction } from "@/app/actions/admin-actions";
 import {
   Layout, Layers, Table2, HardDrive, Cpu, Search, X,
   FileCode, Tag, Code2, Link as LinkIcon, ChevronRight,
   AlignLeft, Hash, Compass, Download, CheckSquare, Square,
+  Plus, Loader2,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -31,6 +38,13 @@ type DbField = {
   id: string; name: string; type: string; length?: number | null;
   nullable?: boolean; description?: string; position?: number;
 };
+type DbIndex = {
+  id: string;
+  name: string;
+  isUnique: boolean;
+  fields: string;
+  description?: string;
+};
 
 const COLORS = [
   "from-blue-500 to-cyan-500",
@@ -45,6 +59,865 @@ function getGradient(label: string) {
   let hash = 0;
   for (let i = 0; i < label.length; i++) hash = label.charCodeAt(i) + ((hash << 5) - hash);
   return COLORS[Math.abs(hash) % COLORS.length];
+}
+
+type ExplorerCreateTarget = "modules" | "tables" | "transactions" | "fields" | "indexes";
+
+type MenuCreatePayload = {
+  title: string;
+  description: string;
+  parentId: string;
+  order: string;
+};
+
+type TableCreatePayload = {
+  name: string;
+  description: string;
+  fieldsString: string;
+  indexesString: string;
+};
+
+type TransactionCreatePayload = {
+  name: string;
+  description: string;
+  pgmType: string;
+  language: string;
+  tables: string;
+  pgms: string;
+};
+
+type FieldCreatePayload = {
+  tableId: string;
+  name: string;
+  type: string;
+  length: string;
+  nullable: boolean;
+  description: string;
+  position: string;
+};
+
+type IndexCreatePayload = {
+  tableId: string;
+  name: string;
+  isUnique: boolean;
+  fields: string;
+  description: string;
+};
+
+type ExplorerCreatePayload =
+  | MenuCreatePayload
+  | TableCreatePayload
+  | TransactionCreatePayload
+  | FieldCreatePayload
+  | IndexCreatePayload;
+
+const MENU_CREATE_DEFAULTS: MenuCreatePayload = {
+  title: "",
+  description: "",
+  parentId: "",
+  order: "0",
+};
+
+const TABLE_CREATE_DEFAULTS: TableCreatePayload = {
+  name: "",
+  description: "",
+  fieldsString: "",
+  indexesString: "",
+};
+
+const TRANSACTION_CREATE_DEFAULTS: TransactionCreatePayload = {
+  name: "",
+  description: "",
+  pgmType: "",
+  language: "",
+  tables: "",
+  pgms: "",
+};
+
+const FIELD_CREATE_DEFAULTS: FieldCreatePayload = {
+  tableId: "",
+  name: "",
+  type: "VARCHAR",
+  length: "",
+  nullable: true,
+  description: "",
+  position: "0",
+};
+
+const INDEX_CREATE_DEFAULTS: IndexCreatePayload = {
+  tableId: "",
+  name: "",
+  isUnique: false,
+  fields: "",
+  description: "",
+};
+
+const PROGRAM_TYPE_OPTIONS = ["Batch Job", "API", "Transaction", "Report", "Service", "Function Module"];
+const LANGUAGE_OPTIONS = ["ABAP", "SQL", "JavaScript", "TypeScript", "Java", "Python"];
+const FIELD_TYPE_OPTIONS = ["VARCHAR", "INT", "BIGINT", "DECIMAL", "DATE", "DATETIME", "BOOLEAN", "TEXT"];
+
+const EXPLORER_CREATE_THEME: Record<ExplorerCreateTarget, {
+  label: string;
+  helper: string;
+  accent: string;
+  shadow: string;
+  ring: string;
+  panelGlow: string;
+  pill: string;
+  button: string;
+}> = {
+  modules: {
+    label: "Menu",
+    helper: "Map the product structure and place new modules exactly where they belong.",
+    accent: "from-blue-500 via-cyan-500 to-sky-500",
+    shadow: "shadow-blue-500/20",
+    ring: "focus:ring-blue-500/25 focus:border-blue-400",
+    panelGlow: "from-blue-500/20 via-cyan-400/10 to-transparent",
+    pill: "bg-blue-500/10 text-blue-700 border-blue-200/70",
+    button: "bg-blue-600 hover:bg-blue-500",
+  },
+  tables: {
+    label: "Table",
+    helper: "Register a new business table and describe the data domain it owns.",
+    accent: "from-indigo-500 via-violet-500 to-blue-500",
+    shadow: "shadow-indigo-500/20",
+    ring: "focus:ring-indigo-500/25 focus:border-indigo-400",
+    panelGlow: "from-indigo-500/20 via-violet-400/10 to-transparent",
+    pill: "bg-indigo-500/10 text-indigo-700 border-indigo-200/70",
+    button: "bg-indigo-600 hover:bg-indigo-500",
+  },
+  transactions: {
+    label: "Transaction",
+    helper: "Capture backend programs, jobs, or services and link them to their tables.",
+    accent: "from-purple-500 via-fuchsia-500 to-pink-500",
+    shadow: "shadow-purple-500/20",
+    ring: "focus:ring-purple-500/25 focus:border-purple-400",
+    panelGlow: "from-purple-500/20 via-fuchsia-400/10 to-transparent",
+    pill: "bg-purple-500/10 text-purple-700 border-purple-200/70",
+    button: "bg-purple-600 hover:bg-purple-500",
+  },
+  fields: {
+    label: "Field",
+    helper: "Define column structure with type, nullability, and order for a selected table.",
+    accent: "from-emerald-500 via-teal-500 to-cyan-500",
+    shadow: "shadow-emerald-500/20",
+    ring: "focus:ring-emerald-500/25 focus:border-emerald-400",
+    panelGlow: "from-emerald-500/20 via-teal-400/10 to-transparent",
+    pill: "bg-emerald-500/10 text-emerald-700 border-emerald-200/70",
+    button: "bg-emerald-600 hover:bg-emerald-500",
+  },
+  indexes: {
+    label: "Index",
+    helper: "Create performance metadata and identify which fields participate in each index.",
+    accent: "from-amber-500 via-orange-500 to-rose-500",
+    shadow: "shadow-amber-500/20",
+    ring: "focus:ring-amber-500/25 focus:border-amber-400",
+    panelGlow: "from-amber-500/20 via-orange-400/10 to-transparent",
+    pill: "bg-amber-500/10 text-amber-700 border-amber-200/70",
+    button: "bg-amber-600 hover:bg-amber-500",
+  },
+};
+
+function buildMenuOptions(menus: Menu[], parentId: string | null = null, depth = 0): { id: string; label: string }[] {
+  return menus
+    .filter((menu) => menu.parentId === parentId)
+    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+    .flatMap((menu) => {
+      const prefix = depth > 0 ? "\u00A0\u00A0\u00A0\u00A0".repeat(depth) + "\u2514\u00A0" : "";
+      return [
+        { id: menu.id, label: `${prefix}${menu.title}` },
+        ...buildMenuOptions(menus, menu.id, depth + 1),
+      ];
+    });
+}
+
+function splitExplorerList(value?: string | null) {
+  if (!value) return [];
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function mergeExplorerList(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).join(", ");
+}
+
+function toggleExplorerListValue(currentValue: string, value: string) {
+  const next = new Set(splitExplorerList(currentValue));
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return mergeExplorerList(Array.from(next));
+}
+
+function ExplorerAddButton({ target, onClick }: { target: ExplorerCreateTarget; onClick: () => void }) {
+  const theme = EXPLORER_CREATE_THEME[target];
+
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        "inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black text-white transition-all active:scale-[0.98]",
+        "shadow-lg backdrop-blur-md",
+        theme.button,
+        theme.shadow,
+      )}
+    >
+      <Plus className="h-4 w-4" />
+      Create {theme.label}
+    </button>
+  );
+}
+
+function ExplorerCreateModal({
+  open,
+  target,
+  menus,
+  tables,
+  saving,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  target: ExplorerCreateTarget | null;
+  menus: Menu[];
+  tables: TableRecord[];
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSubmit: (target: ExplorerCreateTarget, payload: ExplorerCreatePayload) => Promise<void>;
+}) {
+  const [menuForm, setMenuForm] = useState<MenuCreatePayload>(MENU_CREATE_DEFAULTS);
+  const [tableForm, setTableForm] = useState<TableCreatePayload>(TABLE_CREATE_DEFAULTS);
+  const [transactionForm, setTransactionForm] = useState<TransactionCreatePayload>(TRANSACTION_CREATE_DEFAULTS);
+  const [fieldForm, setFieldForm] = useState<FieldCreatePayload>(FIELD_CREATE_DEFAULTS);
+  const [indexForm, setIndexForm] = useState<IndexCreatePayload>(INDEX_CREATE_DEFAULTS);
+  const [activeTarget, setActiveTarget] = useState<ExplorerCreateTarget>("modules");
+  const [tableSearch, setTableSearch] = useState("");
+  const [indexFieldSearch, setIndexFieldSearch] = useState("");
+  const [tableFieldOptions, setTableFieldOptions] = useState<DbField[]>([]);
+  const [loadingTableFields, setLoadingTableFields] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveTarget(target ?? "modules");
+    setMenuForm(MENU_CREATE_DEFAULTS);
+    setTableForm(TABLE_CREATE_DEFAULTS);
+    setTransactionForm(TRANSACTION_CREATE_DEFAULTS);
+    setFieldForm(FIELD_CREATE_DEFAULTS);
+    setIndexForm(INDEX_CREATE_DEFAULTS);
+    setTableSearch("");
+    setIndexFieldSearch("");
+    setTableFieldOptions([]);
+  }, [open, target]);
+
+  const menuOptions = useMemo(() => buildMenuOptions(menus), [menus]);
+  const filteredTransactionTables = useMemo(() => {
+    const q = tableSearch.trim().toLowerCase();
+    if (!q) return tables;
+    return tables.filter((table) =>
+      table.name.toLowerCase().includes(q) ||
+      table.description?.toLowerCase().includes(q),
+    );
+  }, [tables, tableSearch]);
+
+  const indexFieldOptions = useMemo(() => {
+    const q = indexFieldSearch.trim().toLowerCase();
+    if (!q) return tableFieldOptions;
+    return tableFieldOptions.filter((field) =>
+      field.name.toLowerCase().includes(q) ||
+      field.type?.toLowerCase().includes(q),
+    );
+  }, [tableFieldOptions, indexFieldSearch]);
+  const modalTarget: ExplorerCreateTarget = target ?? activeTarget;
+  const theme = EXPLORER_CREATE_THEME[modalTarget];
+  const selectedTransactionTables = splitExplorerList(transactionForm.tables);
+  const selectedIndexFields = splitExplorerList(indexForm.fields);
+  const selectedFieldTable = tables.find((table) => table.id === fieldForm.tableId);
+  const selectedIndexTable = tables.find((table) => table.id === indexForm.tableId);
+  const inputClass = clsx(
+    "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition-all",
+    "placeholder:text-slate-400 focus:bg-slate-50",
+    theme.ring,
+  );
+  const sectionCardClass = "rounded-[24px] border border-slate-200 bg-slate-50/50 p-5 shadow-sm";
+
+  useEffect(() => {
+    if (open && target) setActiveTarget(target);
+  }, [open, target]);
+
+  useEffect(() => {
+    const selectedTableId = modalTarget === "fields" ? fieldForm.tableId : modalTarget === "indexes" ? indexForm.tableId : "";
+
+    if (!selectedTableId) {
+      setTableFieldOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingTableFields(true);
+
+    fetch(`/api/explorer/fields?tableId=${encodeURIComponent(selectedTableId)}`)
+      .then((response) => response.json())
+      .then((rows) => {
+        if (!cancelled) setTableFieldOptions(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTableFieldOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTableFields(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modalTarget, fieldForm.tableId, indexForm.tableId]);
+
+  if (!open || !target) return null;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (modalTarget === "modules") {
+      await onSubmit("modules", menuForm);
+      return;
+    }
+
+    if (modalTarget === "tables") {
+      await onSubmit("tables", tableForm);
+      return;
+    }
+
+    if (modalTarget === "transactions") {
+      await onSubmit("transactions", transactionForm);
+      return;
+    }
+
+    if (modalTarget === "fields") {
+      await onSubmit("fields", fieldForm);
+      return;
+    }
+
+    await onSubmit("indexes", indexForm);
+  }
+
+  return (
+    <div className="fixed top-14 left-56 right-0 bottom-0 z-[999] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-xl" onClick={onClose}>
+      <div
+        className="relative w-full max-w-xl overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_20px_80px_rgba(15,23,42,0.20)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className={clsx("pointer-events-none absolute inset-0 bg-gradient-to-br", theme.panelGlow)} />
+        <div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-white/40 blur-3xl" />
+
+        <div className="relative border-b border-slate-100 px-5 py-5 sm:px-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className={clsx("inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em]", theme.pill)}>
+                FORS Command Center
+              </div>
+              <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-900">Create {theme.label}</h3>
+              <p className="mt-2 max-w-3xl text-sm text-slate-500">
+                {theme.helper}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-full border border-white/60 bg-white/70 p-2 text-slate-500 transition-colors hover:text-rose-500"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+
+
+        <form onSubmit={handleSubmit} className="relative max-h-[55vh] overflow-y-auto px-5 py-5 sm:px-6">
+          <div className="space-y-5">
+            {modalTarget === "modules" && (
+              <>
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Title</label>
+                    <input
+                      value={menuForm.title}
+                      onChange={(event) => setMenuForm((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="Inventory Management"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Parent Menu</label>
+                    <select
+                      value={menuForm.parentId}
+                      onChange={(event) => setMenuForm((current) => ({ ...current, parentId: event.target.value }))}
+                      className={inputClass}
+                    >
+                      <option value="">+ Add as New Top-Level Menu (No Parent)</option>
+                      {menuOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Order</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={menuForm.order}
+                      onChange={(event) => setMenuForm((current) => ({ ...current, order: event.target.value }))}
+                      placeholder="0"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Description</label>
+                  <textarea
+                    value={menuForm.description}
+                    onChange={(event) => setMenuForm((current) => ({ ...current, description: event.target.value }))}
+                    placeholder="Describe what this module owns and how it fits into the system."
+                    rows={4}
+                    className={clsx(inputClass, "resize-none")}
+                  />
+                </div>
+              </>
+            )}
+
+            {modalTarget === "tables" && (
+              <>
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Table Name</label>
+                    <input
+                      value={tableForm.name}
+                      onChange={(event) => setTableForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="incidents_archive"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Fields</label>
+                    <input
+                      value={tableForm.fieldsString}
+                      onChange={(event) => setTableForm((current) => ({ ...current, fieldsString: event.target.value }))}
+                      placeholder="id, name, status, created_at (comma-separated)"
+                      className={inputClass}
+                    />
+                    <p className="mt-2 text-[10px] text-slate-400">Optional. Fields will be created as VARCHAR(255).</p>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Indexes</label>
+                    <input
+                      value={tableForm.indexesString}
+                      onChange={(event) => setTableForm((current) => ({ ...current, indexesString: event.target.value }))}
+                      placeholder="name; status, created_at (semicolon-separated for multiple indexes)"
+                      className={inputClass}
+                    />
+                    <p className="mt-2 text-[10px] text-slate-400">Optional. Indexes will be created as non-unique.</p>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Description</label>
+                    <textarea
+                      value={tableForm.description}
+                      onChange={(event) => setTableForm((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="Explain the purpose of this table and the data it stores."
+                      rows={4}
+                      className={clsx(inputClass, "resize-none")}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {modalTarget === "transactions" && (
+              <>
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Name</label>
+                    <input
+                      value={transactionForm.name}
+                      onChange={(event) => setTransactionForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Z_FORS_SYNC"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Program Type</label>
+                    <input
+                      list="fors-program-types"
+                      value={transactionForm.pgmType}
+                      onChange={(event) => setTransactionForm((current) => ({ ...current, pgmType: event.target.value }))}
+                      placeholder="Batch Job"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Language</label>
+                    <input
+                      list="fors-language-types"
+                      value={transactionForm.language}
+                      onChange={(event) => setTransactionForm((current) => ({ ...current, language: event.target.value }))}
+                      placeholder="ABAP"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+                <datalist id="fors-program-types">
+                  {PROGRAM_TYPE_OPTIONS.map((option) => <option key={option} value={option} />)}
+                </datalist>
+                <datalist id="fors-language-types">
+                  {LANGUAGE_OPTIONS.map((option) => <option key={option} value={option} />)}
+                </datalist>
+                <div>
+                  <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Description</label>
+                  <textarea
+                    value={transactionForm.description}
+                    onChange={(event) => setTransactionForm((current) => ({ ...current, description: event.target.value }))}
+                    placeholder="Summarize the job, service, or program behavior."
+                    rows={4}
+                    className={clsx(inputClass, "resize-none")}
+                  />
+                </div>
+                <div className={sectionCardClass}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Associated Tables</label>
+                      <p className="mt-2 text-xs text-slate-400">Search and click tables to build the transaction mapping faster.</p>
+                    </div>
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">
+                      {selectedTransactionTables.length} selected
+                    </div>
+                  </div>
+                  <div className="mt-4 relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={tableSearch}
+                      onChange={(event) => setTableSearch(event.target.value)}
+                      placeholder="Search registered tables..."
+                      className={clsx(inputClass, "pl-10")}
+                    />
+                  </div>
+                  <div className="mt-4 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white/80 p-3">
+                    <div className="flex flex-col gap-2">
+                      {filteredTransactionTables.map((table) => {
+                        const selected = selectedTransactionTables.includes(table.name);
+                        return (
+                          <button
+                            key={table.id}
+                            type="button"
+                            onClick={() => setTransactionForm((current) => ({
+                              ...current,
+                              tables: toggleExplorerListValue(current.tables, table.name),
+                            }))}
+                            className={clsx(
+                              "flex items-center gap-2 rounded-2xl border px-3 py-3 text-left transition-all",
+                              selected ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                            )}
+                          >
+                            {selected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-300" />}
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-black">{table.name}</div>
+                              <div className="truncate text-xs opacity-70">{table.description || "No description"}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-5">
+                    <div>
+                      <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Tables String</label>
+                      <input
+                        value={transactionForm.tables}
+                        onChange={(event) => setTransactionForm((current) => ({ ...current, tables: event.target.value }))}
+                        placeholder="tickets, audit_logs, database_tables"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Programs</label>
+                      <input
+                        value={transactionForm.pgms}
+                        onChange={(event) => setTransactionForm((current) => ({ ...current, pgms: event.target.value }))}
+                        placeholder="RPT_FORS_SYNC, ZCL_FORS_WRITER"
+                        className={inputClass}
+                      />
+                      <p className="mt-2 text-xs text-slate-400">Optional related programs, comma-separated.</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {modalTarget === "fields" && (
+              <>
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Target Table</label>
+                    <select
+                      value={fieldForm.tableId}
+                      onChange={(event) => setFieldForm((current) => ({ ...current, tableId: event.target.value }))}
+                      className={inputClass}
+                      required
+                    >
+                      <option value="">Select a table...</option>
+                      {tables.map((table) => (
+                        <option key={table.id} value={table.id}>
+                          {table.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Field Name</label>
+                    <input
+                      value={fieldForm.name}
+                      onChange={(event) => setFieldForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="incident_number"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Data Type</label>
+                    <input
+                      list="fors-field-types"
+                      value={fieldForm.type}
+                      onChange={(event) => setFieldForm((current) => ({ ...current, type: event.target.value.toUpperCase() }))}
+                      className={inputClass}
+                      required
+                    />
+                    <datalist id="fors-field-types">
+                      {FIELD_TYPE_OPTIONS.map((option) => <option key={option} value={option} />)}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Length</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={fieldForm.length}
+                      onChange={(event) => setFieldForm((current) => ({ ...current, length: event.target.value }))}
+                      placeholder="255"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Position</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={fieldForm.position}
+                      onChange={(event) => setFieldForm((current) => ({ ...current, position: event.target.value }))}
+                      placeholder="0"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+                <div className={sectionCardClass}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Nullability</label>
+                      <p className="mt-2 text-xs text-slate-400">Set whether this field may remain empty.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFieldForm((current) => ({ ...current, nullable: !current.nullable }))}
+                      className={clsx(
+                        "rounded-full border px-4 py-2 text-xs font-black transition-all",
+                        fieldForm.nullable ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700",
+                      )}
+                    >
+                      {fieldForm.nullable ? "Nullable" : "Not Null"}
+                    </button>
+                  </div>
+                  <textarea
+                    value={fieldForm.description}
+                    onChange={(event) => setFieldForm((current) => ({ ...current, description: event.target.value }))}
+                    placeholder="Explain what this field stores and how it is used."
+                    rows={5}
+                    className={clsx(inputClass, "mt-4 resize-none")}
+                  />
+                  {selectedFieldTable && (
+                    <p className="mt-3 text-xs font-semibold text-slate-500">
+                      This field will be attached to <span className="font-black text-slate-700">{selectedFieldTable.name}</span>.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {modalTarget === "indexes" && (
+              <>
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Target Table</label>
+                    <select
+                      value={indexForm.tableId}
+                      onChange={(event) => {
+                        setIndexForm((current) => ({ ...current, tableId: event.target.value, fields: "" }));
+                        setIndexFieldSearch("");
+                      }}
+                      className={inputClass}
+                      required
+                    >
+                      <option value="">Select a table...</option>
+                      {tables.map((table) => (
+                        <option key={table.id} value={table.id}>
+                          {table.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Index Name</label>
+                    <input
+                      value={indexForm.name}
+                      onChange={(event) => setIndexForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="idx_incident_number"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => setIndexForm((current) => ({ ...current, isUnique: !current.isUnique }))}
+                      className={clsx(
+                        "w-full rounded-2xl border px-4 py-3 text-sm font-black transition-all",
+                        indexForm.isUnique ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-600",
+                      )}
+                    >
+                      {indexForm.isUnique ? "Unique Index" : "Non-Unique Index"}
+                    </button>
+                  </div>
+                </div>
+                <div className={sectionCardClass}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Indexed Fields</label>
+                      <p className="mt-2 text-xs text-slate-400">Choose one or more fields from the selected table.</p>
+                    </div>
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">
+                      {selectedIndexFields.length} selected
+                    </div>
+                  </div>
+                  <div className="mt-4 relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={indexFieldSearch}
+                      onChange={(event) => setIndexFieldSearch(event.target.value)}
+                      placeholder="Search fields..."
+                      className={clsx(inputClass, "pl-10")}
+                      disabled={!indexForm.tableId}
+                    />
+                  </div>
+                  <div className="mt-4 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white/80 p-3">
+                    {!indexForm.tableId ? (
+                      <div className="py-10 text-center text-sm font-semibold text-slate-400">Choose a table first to browse its fields.</div>
+                    ) : loadingTableFields ? (
+                      <div className="py-10 text-center text-sm font-semibold text-slate-400">Loading table fields...</div>
+                    ) : indexFieldOptions.length === 0 ? (
+                      <div className="py-10 text-center text-sm font-semibold text-slate-400">No fields available for this table.</div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {indexFieldOptions.map((field) => {
+                          const selected = selectedIndexFields.includes(field.name);
+                          return (
+                            <button
+                              key={field.id}
+                              type="button"
+                              onClick={() => setIndexForm((current) => ({
+                                ...current,
+                                fields: toggleExplorerListValue(current.fields, field.name),
+                              }))}
+                              className={clsx(
+                                "flex items-center gap-2 rounded-2xl border px-3 py-3 text-left transition-all",
+                                selected ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                              )}
+                            >
+                              {selected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-300" />}
+                              <div>
+                                <div className="text-sm font-black">{field.name}</div>
+                                <div className="text-xs opacity-70">{field.type}{field.length ? ` (${field.length})` : ""}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-4 flex flex-col gap-5">
+                    <div>
+                      <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Fields String</label>
+                      <input
+                        value={indexForm.fields}
+                        onChange={(event) => setIndexForm((current) => ({ ...current, fields: event.target.value }))}
+                        placeholder="incident_number, sys_created_on"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-xs font-black uppercase tracking-[0.22em] text-slate-500">Description</label>
+                      <input
+                        value={indexForm.description}
+                        onChange={(event) => setIndexForm((current) => ({ ...current, description: event.target.value }))}
+                        placeholder="Optimizes incident lookup"
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  {selectedIndexTable && (
+                    <p className="mt-3 text-xs font-semibold text-slate-500">
+                      This index will be attached to <span className="font-black text-slate-700">{selectedIndexTable.name}</span>.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {error && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm font-medium text-rose-700 shadow-sm">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm font-bold text-slate-600 transition-all hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className={clsx(
+                "inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black text-white shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-60",
+                theme.button,
+                theme.shadow,
+              )}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {saving ? `Creating ${theme.label}...` : `Create ${theme.label}`}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 
@@ -71,10 +944,12 @@ function ExplorerContent() {
   const tableParam = searchParams.get("table");
   const menuIdParam = searchParams.get("id");
 
-  // Map "modules" → show menus, else use viewParam directly
-  const activeTab: "modules" | "tables" | "transactions" =
+  // Map view param to active tab
+  const activeTab: "modules" | "tables" | "transactions" | "fields" | "indexes" =
     viewParam === "tables" ? "tables" :
-      viewParam === "transactions" ? "transactions" : "modules";
+      viewParam === "transactions" ? "transactions" :
+        viewParam === "fields" ? "fields" :
+          viewParam === "indexes" ? "indexes" : "modules";
 
   const [menus, setMenus] = useState<Menu[]>([]);
   const [tables, setTables] = useState<TableRecord[]>([]);
@@ -94,14 +969,43 @@ function ExplorerContent() {
   const [searchTableQuery, setSearchTableQuery] = useState("");
   const [txnSearch, setTxnSearch] = useState("");
   const [moduleSearch, setModuleSearch] = useState("");
+  const [currentRole, setCurrentRole] = useState("user");
+  const [createTarget, setCreateTarget] = useState<ExplorerCreateTarget | null>(null);
+  const [createError, setCreateError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+
+  const loadExplorerData = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+
+    try {
+      const [nextMenus, nextTables, nextTxns] = await Promise.all([
+        getExplorerMenus() as Promise<Menu[]>,
+        getExplorerTables() as Promise<TableRecord[]>,
+        getTransactions() as Promise<Txn[]>,
+      ]);
+
+      setMenus(nextMenus);
+      setTables(nextTables);
+      setAllTxns(nextTxns);
+      setSelectedTable((current) => current ? nextTables.find((table) => table.id === current.id) ?? current : current);
+      setSelectedTxn((current) => current ? nextTxns.find((txn) => txn.id === current.id) ?? current : current);
+      setSelectedTxnFromList((current) => current ? nextTxns.find((txn) => txn.id === current.id) ?? current : current);
+
+      return { menus: nextMenus, tables: nextTables, txns: nextTxns };
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    Promise.all([getExplorerMenus(), getExplorerTables()]).then(([m, t]) => {
-      setMenus(m);
-      setTables(t);
-      setLoading(false);
-    });
-    getTransactions().then(setAllTxns);
+    loadExplorerData();
+  }, [loadExplorerData]);
+
+  useEffect(() => {
+    getMyRoleAction()
+      .then((role) => setCurrentRole(role))
+      .catch(() => setCurrentRole("user"));
   }, []);
 
   // Auto-select table from URL param
@@ -153,6 +1057,14 @@ function ExplorerContent() {
     );
   }, [allTxns, txnSearch]);
 
+  const canCreateExplorerRecords = currentRole === "admin" || currentRole === "superadmin";
+  const activeCreateTarget =
+    activeTab === "modules" ? "modules" :
+      activeTab === "tables" ? "tables" :
+        activeTab === "transactions" ? "transactions" :
+          activeTab === "fields" ? "fields" :
+            activeTab === "indexes" ? "indexes" : null;
+
   async function handleTableSelect(tb: TableRecord) {
     if (selectedTable?.id === tb.id) return;
     setSelectedTable(tb);
@@ -189,13 +1101,100 @@ function ExplorerContent() {
     setSelectedMenuIds(newStack);
   }
 
-  function setTab(tab: "modules" | "tables" | "transactions") {
+  function setTab(tab: "modules" | "tables" | "transactions" | "fields" | "indexes") {
     const p = new URLSearchParams();
     p.set("view", tab === "modules" ? "menus" : tab);
     router.push(`/database?${p.toString()}`);
     if (tab !== "tables") setSelectedTable(null);
     if (tab !== "modules") setSelectedMenuIds([]);
   }
+
+  function openCreateModal() {
+    if (!activeCreateTarget || !canCreateExplorerRecords) return;
+    setCreateError("");
+    setCreateTarget(activeCreateTarget);
+  }
+
+  function closeCreateModal() {
+    if (creating) return;
+    setCreateTarget(null);
+    setCreateError("");
+  }
+
+  async function handleCreateSubmit(
+    target: ExplorerCreateTarget,
+    payload: ExplorerCreatePayload,
+  ) {
+    setCreating(true);
+    setCreateError("");
+
+    try {
+      if (target === "modules") {
+        const menuPayload = payload as MenuCreatePayload;
+        await addMenuAction({
+          title: menuPayload.title,
+          description: menuPayload.description,
+          parentId: menuPayload.parentId || null,
+          order: menuPayload.order,
+        });
+      } else if (target === "tables") {
+        const tablePayload = payload as TableCreatePayload;
+        await addTableAction({
+          name: tablePayload.name,
+          description: tablePayload.description,
+        });
+      } else if (target === "fields") {
+        const fieldPayload = payload as FieldCreatePayload;
+        await addFieldAction({
+          tableId: fieldPayload.tableId,
+          name: fieldPayload.name,
+          type: fieldPayload.type,
+          length: fieldPayload.length,
+          nullable: fieldPayload.nullable,
+          description: fieldPayload.description,
+          position: fieldPayload.position,
+        });
+      } else if (target === "indexes") {
+        const indexPayload = payload as IndexCreatePayload;
+        await addIndexAction({
+          tableId: indexPayload.tableId,
+          name: indexPayload.name,
+          isUnique: indexPayload.isUnique,
+          fields: indexPayload.fields,
+          description: indexPayload.description,
+        });
+      } else {
+        const transactionPayload = payload as TransactionCreatePayload;
+        await addTransactionAction({
+          name: transactionPayload.name,
+          description: transactionPayload.description,
+          pgmType: transactionPayload.pgmType,
+          language: transactionPayload.language,
+          tables: transactionPayload.tables,
+          pgms: transactionPayload.pgms,
+        });
+      }
+
+      const refreshed = await loadExplorerData(false);
+      setRefreshVersion((value) => value + 1);
+      if (selectedTable && ["fields", "indexes", "transactions"].includes(target)) {
+        const refreshedTable = refreshed?.tables.find((table) => table.id === selectedTable.id);
+        if (refreshedTable) {
+          await handleTableSelect(refreshedTable);
+        }
+      }
+      setCreateTarget(null);
+      startTransition(() => router.refresh());
+    } catch (error: any) {
+      setCreateError(error?.message || "Unable to create the explorer record.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  const addControl = canCreateExplorerRecords && activeCreateTarget ? (
+    <ExplorerAddButton target={activeCreateTarget} onClick={openCreateModal} />
+  ) : null;
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -216,7 +1215,8 @@ function ExplorerContent() {
           setSelectedMenuIds,
           search: moduleSearch,
           setSearch: setModuleSearch,
-          totalCount: headMenus.length
+          totalCount: headMenus.length,
+          headerAction: addControl,
         })
       ) : activeTab === "transactions" ? (
         <TransactionsView
@@ -225,11 +1225,16 @@ function ExplorerContent() {
           setSearch={setTxnSearch}
           selectedTxn={selectedTxnFromList}
           onSelectTxn={setSelectedTxnFromList}
-          onJumpToTable={(name) => {
+          headerAction={addControl}
+          onJumpToTable={(name: string) => {
             const tb = tables.find(t => t.name.toLowerCase() === name.toLowerCase());
             if (tb) { setTab("tables"); handleTableSelect(tb); }
           }}
         />
+      ) : activeTab === "fields" ? (
+        <FieldsBrowserView tables={tables} headerAction={addControl} refreshVersion={refreshVersion} />
+      ) : activeTab === "indexes" ? (
+        <IndexesBrowserView tables={tables} headerAction={addControl} refreshVersion={refreshVersion} />
       ) : (
         <TablesView
           filteredTables={filteredTables}
@@ -244,12 +1249,23 @@ function ExplorerContent() {
           selectedTxn={selectedTxn}
           onSelectTxn={setSelectedTxn}
           onClose={() => { setSelectedTable(null); setSelectedTxn(null); }}
-          onJumpToTable={(name) => {
+          headerAction={addControl}
+          onJumpToTable={(name: string) => {
             const tb = tables.find(t => t.name.toLowerCase() === name.toLowerCase());
             if (tb) handleTableSelect(tb);
           }}
         />
       )}
+      <ExplorerCreateModal
+        open={createTarget !== null}
+        target={createTarget}
+        menus={menus}
+        tables={tables}
+        saving={creating}
+        error={createError}
+        onClose={closeCreateModal}
+        onSubmit={handleCreateSubmit}
+      />
     </div>
   );
 }
@@ -258,13 +1274,14 @@ function ExplorerContent() {
 
 function renderModulesView({
   headMenus, menus, selectedMenuIds, handleMenuSelect, setSelectedMenuIds,
-  search, setSearch, totalCount
+  search, setSearch, totalCount, headerAction
 }: {
   headMenus: Menu[], menus: Menu[], selectedMenuIds: string[],
   handleMenuSelect: (m: Menu, lvl: number) => void,
   setSelectedMenuIds: (ids: string[]) => void,
   search: string, setSearch: (s: string) => void,
-  totalCount: number
+  totalCount: number,
+  headerAction?: ReactNode
 }) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -283,13 +1300,16 @@ function renderModulesView({
           </div>
         </div>
 
-        <div className="w-72 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text" placeholder="Search modules…"
-            value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/20 transition-all"
-          />
+        <div className="flex items-center gap-3">
+          <div className="w-72 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text" placeholder="Search modules..."
+              value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/20 transition-all"
+            />
+          </div>
+          {headerAction}
         </div>
       </div>
       <div className="flex-1 flex overflow-hidden relative">
@@ -321,10 +1341,11 @@ function renderModulesView({
 
 // ─── Transactions View ────────────────────────────────────────────────────────
 
-function TransactionsView({ txns, search, setSearch, selectedTxn, onSelectTxn, onJumpToTable }: {
+function TransactionsView({ txns, search, setSearch, selectedTxn, onSelectTxn, onJumpToTable, headerAction }: {
   txns: Txn[], search: string, setSearch: (s: string) => void,
   selectedTxn: Txn | null, onSelectTxn: (t: Txn | null) => void,
   onJumpToTable: (name: string) => void,
+  headerAction?: ReactNode,
 }) {
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -344,13 +1365,16 @@ function TransactionsView({ txns, search, setSearch, selectedTxn, onSelectTxn, o
               </div>
             </div>
           </div>
-          <div className="w-72 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text" placeholder="Search transactions…"
-              value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-purple-500/20 transition-all"
-            />
+          <div className="flex items-center gap-3">
+            <div className="w-72 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text" placeholder="Search transactions..."
+                value={search} onChange={e => setSearch(e.target.value)}
+                className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-purple-500/20 transition-all"
+              />
+            </div>
+            {headerAction}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -405,7 +1429,7 @@ function escapeCSV(v: unknown): string {
 function TablesView({
   filteredTables, searchTableQuery, setSearchTableQuery,
   selectedTable, handleTableSelect, tableFields, loadingFields,
-  tableTxns, loadingTxns, selectedTxn, onSelectTxn, onClose, onJumpToTable
+  tableTxns, loadingTxns, selectedTxn, onSelectTxn, onClose, onJumpToTable, headerAction
 }: any) {
   const [exportMode, setExportMode] = useState(false);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set());
@@ -488,7 +1512,7 @@ function TablesView({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
-                  type="text" placeholder="Search everything…"
+                  type="text" placeholder="Search everything..."
                   value={searchTableQuery} onChange={e => setSearchTableQuery(e.target.value)}
                   className="w-64 bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/20 transition-all"
                 />
@@ -516,15 +1540,19 @@ function TablesView({
                   >
                     Cancel
                   </button>
+                  {headerAction}
                 </div>
               ) : (
-                <button
-                  onClick={() => setExportMode(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 border-2 border-slate-200 hover:border-indigo-400 text-slate-600 hover:text-indigo-600 rounded-xl text-sm font-bold transition-all bg-white hover:bg-indigo-50/40"
-                >
-                  <Download className="w-4 h-4" />
-                  Export CSV
-                </button>
+                <>
+                  <button
+                    onClick={() => setExportMode(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 border-2 border-slate-200 hover:border-indigo-400 text-slate-600 hover:text-indigo-600 rounded-xl text-sm font-bold transition-all bg-white hover:bg-indigo-50/40"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export CSV
+                  </button>
+                  {headerAction}
+                </>
               )}
             </div>
           </div>
@@ -942,6 +1970,227 @@ function TxnDetailPanel({ txn, onClose, onJumpToTable }: {
           </div>
         </details>
       </div>
+    </div>
+  );
+}
+
+// ─── Fields Browser View ──────────────────────────────────────────────────────
+
+function FieldsBrowserView({ tables, headerAction, refreshVersion }: { tables: TableRecord[]; headerAction?: ReactNode; refreshVersion: number }) {
+  const [search, setSearch] = useState("");
+  const [selectedTableId, setSelectedTableId] = useState<string>("");
+  const [fields, setFields] = useState<DbField[]>([]);
+  const [loading, setLoading] = useState(false);
+  const selectedTable = tables.find((table) => table.id === selectedTableId);
+
+  async function loadFields(tableId: string) {
+    setSelectedTableId(tableId);
+    setLoading(true);
+    try {
+      const data = await fetch(`/api/explorer/fields?tableId=${encodeURIComponent(tableId)}`).then(r => r.json()).catch(() => []);
+      setFields(data ?? []);
+    } catch { setFields([]); }
+    setLoading(false);
+  }
+
+  const filteredFields = useMemo(() => {
+    if (!search) return fields;
+    const q = search.toLowerCase();
+    return fields.filter(f => f.name.toLowerCase().includes(q) || f.type?.toLowerCase().includes(q) || f.description?.toLowerCase().includes(q));
+  }, [fields, search]);
+
+  useEffect(() => {
+    if (selectedTableId) loadFields(selectedTableId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshVersion]);
+
+  return (
+    <div className="flex-1 flex flex-col p-6 gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">Database Fields</h3>
+          <p className="text-xs text-slate-400 mt-1">Browse field definitions across all registered tables</p>
+        </div>
+        {headerAction}
+      </div>
+
+      <div className="flex items-center gap-4">
+        <select
+          value={selectedTableId}
+          onChange={(e) => e.target.value && loadFields(e.target.value)}
+          className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 min-w-[220px]"
+        >
+          <option value="">Select a table...</option>
+          {tables.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+
+        {selectedTableId && (
+          <div className="relative flex-1 max-w-sm group">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter fields..."
+              className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500"
+            />
+          </div>
+        )}
+      </div>
+
+      {!selectedTableId ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <AlignLeft className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+            <p className="text-sm font-bold text-slate-500">Select a table above to browse its fields</p>
+          </div>
+        </div>
+      ) : loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-slate-400 text-sm animate-pulse font-bold">Loading fields…</p>
+        </div>
+      ) : filteredFields.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-slate-400 text-sm font-bold">No fields found</p>
+        </div>
+      ) : (
+        <div className="space-y-3 overflow-y-auto pr-1">
+          {selectedTable && (
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-5 py-4 text-sm text-emerald-900">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">Selected Table</p>
+                  <p className="mt-1 font-black">{selectedTable.name}</p>
+                </div>
+                <div className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-emerald-700">
+                  {filteredFields.length} fields
+                </div>
+              </div>
+            </div>
+          )}
+          {filteredFields.map((f, i) => (
+            <div key={f.id ?? i} className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex items-center gap-4 hover:border-indigo-300 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                <Hash className="w-4 h-4 text-indigo-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-extrabold text-slate-800 text-sm font-mono">{f.name}</span>
+                {f.description && <p className="text-[11px] text-slate-500 truncate mt-0.5">{f.description}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="bg-slate-100 text-slate-500 font-mono text-[10px] px-2 py-0.5 rounded border border-slate-200">{f.type}</span>
+                {f.length ? <span className="text-[10px] text-slate-400">({f.length})</span> : null}
+                {f.nullable === false && <span className="text-[9px] font-black text-orange-500 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded uppercase">NOT NULL</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Indexes Browser View ─────────────────────────────────────────────────────
+
+type IndexInfo = { id?: string; name: string; fields: string; isUnique: boolean; description?: string };
+
+function IndexesBrowserView({ tables, headerAction, refreshVersion }: { tables: TableRecord[]; headerAction?: ReactNode; refreshVersion: number }) {
+  const [selectedTableId, setSelectedTableId] = useState<string>("");
+  const [indexes, setIndexes] = useState<IndexInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const selectedTable = tables.find(t => t.id === selectedTableId);
+
+  async function loadIndexes(tableId: string) {
+    setSelectedTableId(tableId);
+    setLoading(true);
+    try {
+      const data = await fetch(`/api/explorer/indexes?tableId=${encodeURIComponent(tableId)}`).then(r => r.json()).catch(() => []);
+      setIndexes(Array.isArray(data) ? data : []);
+    } catch { setIndexes([]); }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    if (selectedTableId) loadIndexes(selectedTableId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshVersion]);
+
+  return (
+    <div className="flex-1 flex flex-col p-6 gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">Database Indexes</h3>
+          <p className="text-xs text-slate-400 mt-1">Browse index definitions for performance optimization</p>
+        </div>
+        {headerAction}
+      </div>
+
+      <select
+        value={selectedTableId}
+        onChange={(e) => e.target.value && loadIndexes(e.target.value)}
+        className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 max-w-xs"
+      >
+        <option value="">Select a table...</option>
+        {tables.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+
+      {!selectedTableId ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Layers className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+            <p className="text-sm font-bold text-slate-500">Select a table above to view its indexes</p>
+          </div>
+        </div>
+      ) : loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-slate-400 text-sm animate-pulse font-bold">Loading indexes…</p>
+        </div>
+      ) : indexes.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-slate-400 text-sm font-bold">No indexes found for this table</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden overflow-y-auto">
+          {selectedTable && (
+            <div className="border-b border-slate-100 bg-amber-50/70 px-6 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-600">Selected Table</p>
+                  <p className="mt-1 font-black text-slate-900">{selectedTable.name}</p>
+                </div>
+                <div className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-amber-700">
+                  {indexes.length} indexes
+                </div>
+              </div>
+            </div>
+          )}
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-[10px] text-slate-400 font-black uppercase tracking-widest bg-slate-50/50">
+                <th className="text-left px-6 py-4 border-b border-slate-100">Index Name</th>
+                <th className="text-left px-6 py-4 border-b border-slate-100">Fields</th>
+                <th className="text-left px-6 py-4 border-b border-slate-100">Unique</th>
+                <th className="text-left px-6 py-4 border-b border-slate-100">Description</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {indexes.map((idx, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-bold font-mono text-indigo-600">{idx.name}</td>
+                  <td className="px-6 py-4 text-sm font-mono text-slate-700">{idx.fields}</td>
+                  <td className="px-6 py-4">
+                    {idx.isUnique ? (
+                      <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase">Unique</span>
+                    ) : (
+                      <span className="text-[9px] font-black text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded uppercase">Non-Unique</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-xs font-bold text-slate-500">{idx.description || "No description"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

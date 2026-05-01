@@ -20,24 +20,25 @@ export async function POST(request: Request) {
         }
 
         // Save to ai_analysis table
+        // FIX: 7 columns → 7 placeholders; comma added before impacted_tables in ON DUPLICATE KEY UPDATE
         await execute(`
             INSERT INTO ai_analysis (
-                incident_number, 
-                incident_description, 
-                root_cause, 
-                resolution_steps, 
-                suggested_sql, 
+                incident_number,
+                incident_description,
+                root_cause,
+                resolution_steps,
+                suggested_sql,
                 confidence_score,
                 impacted_tables
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 incident_description = VALUES(incident_description),
-                root_cause = VALUES(root_cause),
-                resolution_steps = VALUES(resolution_steps),
-                suggested_sql = VALUES(suggested_sql),
-                confidence_score = VALUES(confidence_score)
-                impacted_tables = VALUES(impacted_tables)
+                root_cause           = VALUES(root_cause),
+                resolution_steps     = VALUES(resolution_steps),
+                suggested_sql        = VALUES(suggested_sql),
+                confidence_score     = VALUES(confidence_score),
+                impacted_tables      = VALUES(impacted_tables)
         `, [
             incident_number,
             incident_description || '',

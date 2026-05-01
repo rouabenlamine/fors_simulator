@@ -39,14 +39,19 @@ export async function getAllViewPermissions(): Promise<
   const session = await getSession();
   const callerRole = session.user?.role;
 
-  // Global Controller oversight: only superadmin can access the suite
-  if (callerRole !== "superadmin") {
+  // Auth guard: Global Controller or Admin oversight
+  if (callerRole !== "superadmin" && callerRole !== "admin") {
     return {};
   }
 
-  const roles = ["it_support", "it_manager", "it_report", "admin"];
+  // Define which roles this caller is allowed to see/manage
+  let managedRoles = ["it_support", "it_manager", "it_report"];
+  if (callerRole === "superadmin") {
+    managedRoles.push("admin");
+  }
+
   const result: Record<string, RolePermissions> = {};
-  for (const role of roles) {
+  for (const role of managedRoles) {
     result[role] = await getViewPermissionsForRole(role);
   }
   return result;
@@ -61,9 +66,14 @@ export async function updateViewPermissionsAction(
   const callerRole = session.user?.role;
   const callerMatricule = session.user?.matricule || "SYSTEM";
 
-  // Auth guard: Global Controller oversight
-  if (callerRole !== "superadmin") {
-    return { success: false, error: "Superadmin access required to manage view control." };
+  // Auth guard: Superadmin or Admin
+  if (callerRole !== "superadmin" && callerRole !== "admin") {
+    return { success: false, error: "Administrative access required to manage view control." };
+  }
+
+  // Restrict Admins from editing administrative roles
+  if (callerRole === "admin" && (targetRole === "admin" || targetRole === "superadmin")) {
+    return { success: false, error: "Admins cannot modify administrative view permissions." };
   }
 
   try {

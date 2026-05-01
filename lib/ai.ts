@@ -15,29 +15,51 @@ export interface AnalysisResult {
 // ─── Dataset Schema Loader ───────────────────────────────────────────────────
 
 /**
- * Fetches the target dataset schema from the `database_tables` metadata table.
- * This ensures the AI reasons about the actual data model being analyzed
- * and NOT the IT Support platform's internal system tables.
+ * Fetches the target dataset schema with full column detail.
+ * Runs DESCRIBE on every non-system table so the AI knows the exact column
+ * names and types — preventing hallucinated field names in generated SQL.
+ *
+ * Output format example:
+ *   orders(id INT, customer_name VARCHAR, total DECIMAL, created_at DATETIME)
+ *   products(id INT, name VARCHAR, price DECIMAL, stock INT)
  */
 async function getTargetDatasetSchema(): Promise<string> {
   try {
-    // We MUST use SHOW TABLES to ensure the AI only gets tables that physically exist
-    // in the database, avoiding SQL execution errors for missing tables.
+    // 1. Discover all physical tables in the database
     const [allTables] = await pool.execute("SHOW TABLES") as any;
-    
-    // Filter out the platform's internal system tables
-    const systemTables = ['ai_analysis', 'audit_logs', 'chat_history', 'database_fields', 'database_indexes', 'database_tables', 'discussions', 'kpi_configs', 'menus', 'predefined_queries', 'sessions', 'tickets', 'transactions', 'users', 'validated_incidents'];
-    
+
+    // 2. Strip out platform-internal tables so the AI doesn't reference them
+    const systemTables = new Set([
+      'ai_analysis', 'audit_logs', 'chat_history', 'conversations', 'messages',
+      'database_fields', 'database_indexes', 'database_tables', 'discussions',
+      'kpi_configs', 'menus', 'predefined_queries', 'sessions', 'system_configurations',
+      'tickets', 'transactions', 'users', 'validated_incidents',
+    ]);
+
     const realTables = (allTables as any[])
       .map(row => Object.values(row)[0] as string)
-      .filter(name => !systemTables.includes(name));
+      .filter(name => !systemTables.has(name));
 
-    if (realTables.length > 0) {
-      console.log(`[Schema] Discovered ${realTables.length} physical business tables.`);
-      return realTables.join(', ');
+    if (realTables.length === 0) {
+      return 'No physical business tables found in the database.';
     }
 
-    return 'No physical business tables found in the database.';
+    // 3. DESCRIBE each table to get real column names + types
+    const schemaParts: string[] = [];
+    for (const tableName of realTables) {
+      try {
+        const [columns] = await pool.execute(`DESCRIBE \`${tableName}\``) as any;
+        const colDefs = (columns as any[])
+          .map(c => `${c.Field} ${c.Type}`)
+          .join(', ');
+        schemaParts.push(`${tableName}(${colDefs})`);
+      } catch {
+        schemaParts.push(`${tableName}(-- schema unavailable --)`);
+      }
+    }
+
+    console.log(`[Schema] Loaded ${realTables.length} business tables with column detail.`);
+    return schemaParts.join('\n');
   } catch (err) {
     console.warn('[Schema] Failed to load physical schema:', err);
     return 'Schema metadata unavailable.';
@@ -127,25 +149,74 @@ export async function generateAnalysisWithOllama(
 
 // ─── GOST Chat Response ──────────────────────────────────────────────────────
 
+const OFF_TOPIC_REPLY =
+  "I can only answer questions about this specific ticket. Please ask something related to the incident, its diagnosis, or its resolution.";
+
+/**
+ * Determines whether the user message is on-topic for the given ticket.
+ * Returns false for greetings, personal questions, or anything with no
+ * connection to the ticket subject.
+ */
+function isOnTopic(message: string, ticket: any | null): boolean {
+  const lower = message.toLowerCase().trim();
+
+  // Pure greetings / small-talk patterns
+  const offTopicPatterns = [
+    /^(hi|hello|hey|good\s*(morning|afternoon|evening)|how are you|what'?s up|sup)\b/i,
+    /^(who are you|what are you|tell me about yourself|your name)\b/i,
+    /\b(weather|joke|fun fact|personal|hobby|favorite)\b/i,
+    /^(thanks?|thank you|thx|cheers|bye|goodbye|see you)\s*[.!]?\s*$/i,
+  ];
+
+  if (offTopicPatterns.some(p => p.test(lower))) return false;
+
+  // If there's a ticket in context the message is almost certainly on-topic
+  return true;
+}
+
 export async function getGostChatResponse(
   userMessage: string,
   history: { role: string; content: string }[] = [],
+  ticketContext: any | null = null,
 ): Promise<string> {
-  const [context, datasetSchema] = await Promise.all([
-    retrieveRagContext(userMessage),
-    getTargetDatasetSchema(),
-  ]);
+  // ── Fast off-topic guard (no LLM call needed) ─────────────────────────────
+  if (!isOnTopic(userMessage, ticketContext)) {
+    return OFF_TOPIC_REPLY;
+  }
 
-  const systemPrompt = `You are GOST, the FORS automated support assistant.
-Answer accurately and fast. No internal thinking. No intro/outro.
-Be concise and precise to the message sent by the user. Do not respond with blocks of words. Provide exactly the desired response.
-Use the TARGET DATASET SCHEMA for table references.
+  // ── Build the ticket-scoped system prompt ────────────────────────────────
+  let ticketBlock = "";
+  if (ticketContext) {
+    ticketBlock = `
+ACTIVE TICKET (your working context for this session):
+  ID          : ${ticketContext.number}
+  Title       : ${ticketContext.short_description || "N/A"}
+  Description : ${ticketContext.description || "N/A"}
+  Status      : ${ticketContext.state || "N/A"}
+  Priority    : ${ticketContext.priority || "N/A"}
+  Team        : ${ticketContext.assignment_group || "N/A"}
+  Assigned To : ${ticketContext.assigned_to || "Unassigned"}
+${ticketContext.root_cause ? `  AI Root Cause  : ${ticketContext.root_cause}` : ""}
+${ticketContext.suggested_sql ? `  AI SQL Proposal: ${ticketContext.suggested_sql}` : ""}
+${ticketContext.resolution_steps ? `  AI Resolution  : ${ticketContext.resolution_steps}` : ""}`;
+  }
 
-TARGET DATASET SCHEMA:
-${datasetSchema}
+  const systemPrompt = `You are GOST, the FORS IT support assistant, operating inside an incident ticket session.
 
-KNOWLEDGE CONTEXT:
-${context.text}`;
+Your job is to help the user investigate, understand, and resolve the ACTIVE TICKET. You are a technical expert.
+
+WHAT YOU MUST DO:
+  - Answer any technical question related to the incident's problem domain (database issues, SQL queries, error analysis, system behavior, alternative approaches, debugging steps, etc.)
+  - Suggest alternative SQL queries or improved solutions even if not already in the ticket — technical exploration is valid and expected.
+  - Explain concepts, propose fixes, or analyze the root cause more deeply if asked.
+  - Keep answers concise and direct. No verbose intros, no "Great question!", no unsolicited summaries.
+
+WHAT YOU MUST NOT DO:
+  - Do NOT reference other tickets or past incidents unless the user explicitly asks.
+  - Do NOT answer questions completely unrelated to the incident (greetings, personal chat, weather, sports, etc.).
+  - Do NOT fabricate ticket metadata (status, assigned team, priority) — report only what is in the ACTIVE TICKET block.
+  - Do NOT refuse legitimate technical requests by citing "guidelines" — if it relates to the incident's problem, answer it.
+${ticketBlock}`;
 
   const messages = [
     { role: "system", content: systemPrompt },
@@ -166,7 +237,7 @@ ${context.text}`;
         stream: false,
         options: {
           num_ctx: 2048,
-          temperature: 0.3
+          temperature: 0.2,  // Slightly higher to allow creative technical reasoning
         }
       }),
       signal: controller.signal,
@@ -194,6 +265,19 @@ ${context.text}`;
       } else {
         reply = reply.replace(/Thinking Process:[\s\S]*?(?=\n\n|\n[A-Z_])/i, "").trim();
       }
+    }
+
+    // Guard: only strip genuinely off-topic drift (references to other tickets)
+    // Do NOT strip legitimate technical suggestions like alternative SQL
+    const driftPatterns = [
+      /similar (tickets?|incidents?|issues?) (?:show|reveal|suggest|indicate)/i,
+      /\bin (other|previous|another) tickets?\b/i,
+      /historically speaking/i,
+    ];
+    if (ticketContext && driftPatterns.some(p => p.test(reply))) {
+      const sentences = reply.split(/(?<=[.!?])\s+/);
+      const clean = sentences.filter(s => !driftPatterns.some(p => p.test(s)));
+      reply = clean.length > 0 ? clean.join(" ").trim() : reply;
     }
 
     return reply;

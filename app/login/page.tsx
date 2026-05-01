@@ -7,17 +7,17 @@ import { Hash, Lock, Eye, EyeOff, Users, ShieldAlert, BarChart3 } from "lucide-r
 import type { UserRole } from "@/lib/types";
 
 const ROLE_REDIRECT: Record<string, string> = {
-  agent: "/tickets",
-  reporter: "/report",
-  manager: "/activity",
+  it_support: "/tickets",
+  it_report: "/report",
+  it_manager: "/activity",
 };
 
 // Only IT roles are allowed on this login page
-const ALLOWED_ROLES = ["agent", "reporter", "manager", "it_support", "it_report", "it_manager"];
+const ALLOWED_ROLES = ["it_support", "it_report", "it_manager"];
 
 export default function LoginPage() {
   const router = useRouter();
-  const [selectedRole, setSelectedRole] = useState<UserRole>("agent");
+  const [selectedRole, setSelectedRole] = useState<UserRole>("it_support");
   const [matricule, setMatricule] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -64,9 +64,9 @@ export default function LoginPage() {
   }
 
   const roleTabs = [
-    { id: "agent", label: "IT Support", icon: Users },
-    { id: "manager", label: "IT Manager", icon: ShieldAlert },
-    { id: "reporter", label: "IT Reporter", icon: BarChart3 },
+    { id: "it_support", label: "IT Support", icon: Users },
+    { id: "it_manager", label: "IT Manager", icon: ShieldAlert },
+    { id: "it_report", label: "IT Reporter", icon: BarChart3 },
   ] as const;
 
   return (

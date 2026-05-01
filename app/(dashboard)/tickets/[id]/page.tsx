@@ -108,6 +108,19 @@ export default function TicketDetailPage() {
   const [sqlPreview, setSqlPreview] = useState<{ success: boolean, columns: string[], rows: any[], error: string | null } | null>(null);
   const [sqlPreviewLoading, setSqlPreviewLoading] = useState(false);
 
+  /** Strip SQL comment lines and inline -- comments, returning only executable SQL */
+  function stripSqlComments(sql: string): string {
+    return sql
+      .split('\n')
+      .map(line => {
+        // Remove inline -- comments but keep the rest of the line
+        const inlineIdx = line.indexOf('--');
+        return inlineIdx >= 0 ? line.slice(0, inlineIdx) : line;
+      })
+      .join('\n')
+      .trim();
+  }
+
   const [eventLogs, setEventLogs] = useState<any[]>([]);
   const [eventLogsLoading, setEventLogsLoading] = useState(true);
 
@@ -154,21 +167,31 @@ export default function TicketDetailPage() {
   }
 
   async function handleRunSqlPreview() {
-    if (!analysis?.sqlProposal) return;
+    if (!analysis?.sqlProposal) {
+      setSqlPreview({ success: false, columns: [], rows: [], error: "No SQL proposal found for this ticket." });
+      return;
+    }
+
+    // Strip all comment lines and inline -- comments
+    const executableSql = stripSqlComments(analysis.sqlProposal);
+
+    // Guard: don't bother calling server if SQL is empty or comment-only
+    if (!executableSql) {
+      setSqlPreview({ success: false, columns: [], rows: [], error: "No executable SQL — the AI analysis did not generate a runnable query for this ticket." });
+      return;
+    }
+
     setSqlPreviewLoading(true);
+    setSqlPreview(null);
     try {
-      const sqlLines = analysis.sqlProposal
-        .split('\n')
-        .filter(l => !l.trim().startsWith('--'))
-        .join('\n')
-        .trim();
-      const res = await executeSqlPreviewAction(ticket!.id, sqlLines);
+      const res = await executeSqlPreviewAction(ticket!.id, executableSql);
       setSqlPreview(res);
       fetchEventLogs(ticket!.id);
-    } catch {
-      setSqlPreview({ success: false, columns: [], rows: [], error: "Execution failed" });
+    } catch (err: any) {
+      setSqlPreview({ success: false, columns: [], rows: [], error: err?.message || "Execution request failed. Check your connection and try again." });
+    } finally {
+      setSqlPreviewLoading(false);
     }
-    setSqlPreviewLoading(false);
   }
 
   if (loading) {
@@ -210,11 +233,13 @@ export default function TicketDetailPage() {
 
         <div className="flex items-center gap-3">
           {ticket.aiConfidence !== undefined && (
-            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 px-4 py-2 rounded-xl">
-              <Zap className="w-4 h-4 text-blue-600" />
+            <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md border border-white/60 px-4 py-2 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-blue-600" />
+              </div>
               <div>
-                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-tight">AI Confidence</p>
-                <p className="text-sm font-bold text-blue-700">{ticket.aiConfidence}%</p>
+                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">AI Confidence</p>
+                <p className="text-sm font-black text-slate-800">{ticket.aiConfidence}%</p>
               </div>
             </div>
           )}
@@ -224,29 +249,32 @@ export default function TicketDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-4 border-t-blue-500">
-            <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-blue-50/10">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <div className="w-1.5 h-4 bg-blue-600 rounded-full shadow-[0_0_8px_rgba(37,99,235,0.4)]" />
+          <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_40px_rgb(0,0,0,0.04)] overflow-hidden relative group">
+            {/* Top gradient accent */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 opacity-90" />
+            
+            <div className="p-6 border-b border-white/40 flex items-center justify-between bg-white/30 backdrop-blur-sm mt-1.5">
+              <h3 className="font-black text-slate-800 flex items-center gap-3 tracking-tight text-lg">
+                <div className="w-2 h-6 bg-blue-500 rounded-full shadow-[0_0_12px_rgba(59,130,246,0.6)]" />
                 Ticket Information
               </h3>
-              <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
+              <div className="flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
                 <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(ticket.createdAt).toLocaleString()}</span>
               </div>
             </div>
-            <div className="p-6">
-              <h4 className="text-xl font-black text-slate-800 mb-4 tracking-tight">{ticket.title}</h4>
-              <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-100 rounded-2xl p-6 mb-8 shadow-inner">
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{ticket.description}</p>
+            <div className="p-8">
+              <h4 className="text-2xl font-black text-slate-900 mb-6 tracking-tight leading-tight">{ticket.title}</h4>
+              <div className="bg-white/60 backdrop-blur-sm border border-slate-200/50 rounded-2xl p-6 mb-10 shadow-sm">
+                <p className="text-sm font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">{ticket.description}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div>
-                  <h5 className="text-[11px] font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <div className="w-1 h-3 bg-blue-400/50 rounded-full" />
+                  <h5 className="text-[11px] font-black text-blue-500 uppercase tracking-widest mb-5 flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-blue-400/80 rounded-full" />
                     Request Details
                   </h5>
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <DetailItem label="Opened By" value={ticket.openedBy} />
                     <DetailItem label="Opened At" value={ticket.openedAt} />
                     <DetailItem label="Business Service" value={ticket.businessService} />
@@ -254,11 +282,11 @@ export default function TicketDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <h5 className="text-[11px] font-black text-violet-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <div className="w-1 h-3 bg-violet-400/50 rounded-full" />
+                  <h5 className="text-[11px] font-black text-violet-500 uppercase tracking-widest mb-5 flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-violet-400/80 rounded-full" />
                     Assignment
                   </h5>
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <DetailItem label="Assignment Group" value={ticket.team} />
                     <DetailItem label="Assigned To" value={ticket.assignedTo} />
                     <DetailItem label="Updated By" value="System" />
@@ -268,16 +296,16 @@ export default function TicketDetailPage() {
               </div>
 
               {/* SAP Module Dispatcher */}
-              <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-between">
+              <div className="mt-10 pt-8 border-t border-slate-200/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <h5 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-1">
+                  <h5 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-1">
                     System Routing
                   </h5>
-                  <p className="text-xs text-slate-500">Assign specific SAP module context.</p>
+                  <p className="text-xs font-medium text-slate-500">Assign specific SAP module context.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   {sapModule && (
-                    <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold ${getSapModuleColor(sapModule)}`}>
+                    <div className={`px-4 py-2 rounded-xl border text-xs font-black shadow-sm ${getSapModuleColor(sapModule)}`}>
                       SAP {sapModule}
                     </div>
                   )}
@@ -285,7 +313,7 @@ export default function TicketDetailPage() {
                     value={sapModule}
                     onChange={(e) => handleSapModuleChange(e.target.value)}
                     disabled={sapModuleLoading}
-                    className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-blue-100 outline-none"
+                    className="p-2.5 bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-xl text-xs font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all shadow-sm cursor-pointer"
                   >
                     {SAP_MODULES.map(m => (
                       <option key={m.value} value={m.value}>{m.label}</option>
@@ -401,8 +429,8 @@ export default function TicketDetailPage() {
                       <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">SQL Execution Results</span>
                       <button
                         onClick={handleRunSqlPreview}
-                        disabled={sqlPreviewLoading || analysis.sqlProposal.startsWith("--")}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-4 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50"
+                        disabled={sqlPreviewLoading}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-4 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {sqlPreviewLoading ? "Running..." : "Run Preview"}
                       </button>

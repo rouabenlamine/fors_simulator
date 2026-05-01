@@ -37,4 +37,4 @@ export const PRIORITY_COLORS: Record<TicketPriority, string> = {
 };
 
 export const TEAM_OPTIONS = ["IT Support", "Database Team", "Infrastructure", "Security", "Applications"];
-export const ROLE_OPTIONS = ["agent", "reporter", "manager", "it_support", "it_report", "it_manager", "admin", "superadmin"];
+export const ROLE_OPTIONS = ["it_support", "it_report", "it_manager", "admin", "superadmin"];

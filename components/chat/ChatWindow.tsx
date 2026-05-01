@@ -70,55 +70,73 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
   }
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-        <span className="text-sm font-semibold text-slate-800">FORS AGENT — Ticket #{ticketId}</span>
+    <div className="flex flex-col h-full bg-white/80 backdrop-blur-xl rounded-3xl border border-white/60 shadow-[0_8px_40px_rgb(0,0,0,0.06)] overflow-hidden relative">
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/30 via-white/50 to-blue-50/30 pointer-events-none" />
+      
+      <div className="relative px-6 py-4 border-b border-white/60 flex items-center gap-3 bg-white/40">
+        <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+        <span className="text-sm font-black text-slate-800 tracking-tight uppercase">Ticket #{ticketId}</span>
       </div>
 
-      <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-        {messages.map((msg) => (
+      <div className="relative flex-1 p-6 space-y-6 overflow-y-auto scroll-smooth">
+        {messages.map((msg, idx) => (
           <div
             key={msg.id}
-            className={`flex gap-3 ${msg.role === "User" ? "flex-row-reverse" : "flex-row"}`}
+            className={`flex gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500 ${msg.role === "User" ? "flex-row-reverse" : "flex-row"}`}
+            style={{ animationDelay: `${(idx % 10) * 50}ms` }}
           >
-            <div className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center ${msg.role === "AI" ? "bg-accent-blue" : "bg-accent-orange"
+            <div className={`w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center shadow-lg transition-transform hover:scale-110 duration-300 ${msg.role === "AI" ? "bg-gradient-to-br from-indigo-500 to-blue-600 shadow-blue-200" : "bg-gradient-to-br from-teal-500 to-emerald-600 shadow-emerald-200"
               }`}>
               {msg.role === "AI" ? (
-                <Bot className="w-3.5 h-3.5 text-slate-800" />
+                <Bot className="w-4.5 h-4.5 text-white" />
               ) : (
-                <User className="w-3.5 h-3.5 text-slate-800" />
+                <User className="w-4.5 h-4.5 text-white" />
               )}
             </div>
-            <div className={`flex flex-col gap-0.5 max-w-[75%] ${msg.role === "User" ? "items-end" : "items-start"}`}>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400">{msg.senderName}</span>
-                <span className="text-[10px] text-slate-300">{formatTime(msg.createdAt)}</span>
+            <div className={`flex flex-col gap-1.5 max-w-[75%] ${msg.role === "User" ? "items-end" : "items-start"}`}>
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{msg.senderName}</span>
+                <span className="text-[9px] font-bold text-slate-300">{formatTime(msg.createdAt)}</span>
               </div>
-              <div className={`px-3 py-2 rounded-xl text-sm leading-relaxed ${msg.role === "AI"
-                  ? "bg-gray-100 text-slate-800/90"
-                  : "bg-accent-blue text-slate-800"
+              <div className={`px-5 py-3.5 rounded-2xl text-[13px] leading-relaxed shadow-sm backdrop-blur-md ${msg.role === "AI"
+                ? "bg-white/90 border border-slate-100 text-slate-700 rounded-tl-sm hover:shadow-md transition-shadow"
+                : "bg-indigo-600 border border-indigo-500 text-white rounded-tr-sm shadow-indigo-200/50 hover:shadow-indigo-300/50 hover:bg-indigo-500 transition-all"
                 }`}>
                 {msg.content}
               </div>
             </div>
           </div>
         ))}
+        {isTyping && (
+          <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center shadow-lg bg-gradient-to-br from-indigo-500 to-blue-600 shadow-blue-200">
+              <Bot className="w-4.5 h-4.5 text-white animate-pulse" />
+            </div>
+            <div className="flex flex-col gap-1.5 items-start">
+              <div className="px-5 py-4 rounded-2xl rounded-tl-sm bg-white/90 border border-slate-100 shadow-sm flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-2">
+      <div className="relative px-6 py-4 border-t border-white/60 bg-white/40 flex items-center gap-3">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Type a message..."
-          className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-gray-500"
+          placeholder="Message FORS AGENT..."
+          className="flex-1 bg-white/80 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm"
         />
         <button
           onClick={send}
-          className="w-9 h-9 bg-accent-blue rounded-xl flex items-center justify-center hover:bg-blue-600 transition-colors shrink-0"
+          disabled={!input.trim() || isTyping}
+          className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white hover:bg-indigo-700 hover:scale-105 active:scale-95 transition-all shrink-0 shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:hover:scale-100"
         >
-          <Send className="w-4 h-4 text-slate-800" />
+          {isTyping ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 ml-0.5" />}
         </button>
       </div>
     </div>

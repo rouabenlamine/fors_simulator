@@ -9,7 +9,10 @@ import { logActivity } from "@/lib/audit";
 
 
 export async function getTickets(): Promise<Ticket[]> {
-  const q = `
+  const session = await getSession();
+  const role = session.user?.role;
+  
+  let q = `
     SELECT 
       t.number as id, 
       t.short_description as title, 
@@ -32,7 +35,14 @@ export async function getTickets(): Promise<Ticket[]> {
     FROM tickets t
     LEFT JOIN ai_analysis a ON t.number = a.incident_number
   `;
-  const results = await query<any>(q);
+  const params: any[] = [];
+  if (role === "it_manager") {
+    q += " WHERE t.assignment_group = 'IT Support'";
+  }
+
+  q += " ORDER BY t.sys_created_on DESC";
+
+  const results = await query<any>(q, params);
   const data = results.map(r => ({
     ...r,
     status: (r.state?.toLowerCase() === 'closed' ? 'closed' :
@@ -173,12 +183,39 @@ export async function getChatMessages(): Promise<ChatMessage[]> {
 }
 
 export async function getKpis(): Promise<KPI[]> {
-  // This is generic mock for now if kpis logic isn't heavily present in DB stats
-  return [
-    { id: "k1", category: "sla", label: "SLA Compliance Rate", value: 87, change: 3, changeType: "up", unit: "%", target: 95 },
-    { id: "k2", category: "sla", label: "SLA Breaches", value: 4, change: -2, changeType: "down" },
-    { id: "k7", category: "volume", label: "Open Tickets", value: 7 }
-  ];
+  const session = await getSession();
+  const role = session.user?.role;
+  
+  let groupFilter = "";
+  if (role === "it_manager") {
+    groupFilter = " WHERE assignment_group = 'IT Support'";
+  }
+
+  try {
+    const [totalRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets${groupFilter}`);
+    const [closedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state IN ('Closed', 'Validated')`);
+    const [openRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state NOT IN ('Closed', 'Validated', 'Canceled')`);
+    const [slaBreachRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Rejected'`);
+
+    const total = totalRes?.c || 0;
+    const closed = closedRes?.c || 0;
+    const open = openRes?.c || 0;
+    const slaComp = total > 0 ? Math.round((closed / total) * 100) : 0;
+
+    return [
+      { id: "k1", category: "sla", label: "SLA Compliance Rate", value: slaComp, change: 2, changeType: "up", unit: "%", target: 95 },
+      { id: "k2", category: "sla", label: "SLA Breaches", value: slaBreachRes?.c || 0, change: -1, changeType: "down" },
+      { id: "k7", category: "volume", label: "Open Tickets", value: open, change: 1, changeType: "up" },
+      { id: "k8", category: "volume", label: "Total Managed Tickets", value: total }
+    ];
+  } catch (err) {
+    console.error("getKpis failed:", err);
+    return [
+      { id: "k1", category: "sla", label: "SLA Compliance Rate", value: 87, change: 3, changeType: "up", unit: "%", target: 95 },
+      { id: "k2", category: "sla", label: "SLA Breaches", value: 4, change: -2, changeType: "down" },
+      { id: "k7", category: "volume", label: "Open Tickets", value: 7 }
+    ];
+  }
 }
 
 export async function getActivities(): Promise<ActivityLog[]> {
@@ -194,7 +231,26 @@ export async function getActivities(): Promise<ActivityLog[]> {
       }
     }
 
-    const rows = await query<any>("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 50");
+    let q = "SELECT * FROM audit_logs";
+    const params: any[] = [];
+    const conditions: string[] = [];
+
+    if (role === "it_manager") {
+      // Filter for IT Support related logs
+      conditions.push(`(user_matricule IN (SELECT matricule FROM users WHERE role = 'it_support')
+           OR details LIKE '%"team":"IT Support"%'
+           OR details LIKE '%IT Support%')`);
+    } else if (role === "admin") {
+      // Admin sees everything except superadmin logs
+      conditions.push("user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')");
+    }
+
+    if (conditions.length > 0) {
+      q += " WHERE " + conditions.join(" AND ");
+    }
+
+    q += " ORDER BY created_at DESC LIMIT 50";
+    const rows = await query<any>(q, params);
     console.log("[getActivities] Fetched rows count:", rows.length);
 
     if (rows && rows.length > 0) {
@@ -238,7 +294,7 @@ export async function getUsers(): Promise<User[]> {
     matricule: r.matricule,
     name: r.name,
     surname: r.prenom,
-    role: r.role === "admin" ? "manager" : r.role === "it_support" ? "agent" : "reporter"
+    role: r.role
   }));
 }
 
@@ -458,7 +514,18 @@ export async function chatWithGostAction(ticketId: string, message: string, hist
     console.error("Failed to save user chat:", err);
   }
 
-  const reply = await getGostChatResponse(message, history);
+  // Fetch the full ticket + its AI analysis to give GOST strict context
+  const [ticketRow] = await query<any>(
+    `SELECT t.number, t.short_description, t.description, t.state, t.priority,
+            t.assignment_group, t.assigned_to, t.comments,
+            a.root_cause, a.resolution_steps, a.suggested_sql, a.confidence_score
+     FROM tickets t
+     LEFT JOIN ai_analysis a ON a.incident_number = t.number
+     WHERE t.number = ?`,
+    [ticketId]
+  );
+
+  const reply = await getGostChatResponse(message, history, ticketRow ?? null);
 
   // 2. Save AI Reply
   try {
@@ -666,6 +733,11 @@ export async function rejectAnalysisAction(ticketId: string, reason: string = ""
       ticketId
     ]);
 
+    await query(
+      "UPDATE ai_analysis SET consulted_at = NOW(), consulted_by = ? WHERE incident_number = ?",
+      [userMatricule, ticketId]
+    );
+
     await logActivity("TICKET_REJECTED", {
       ticketId,
       userMatricule,
@@ -868,6 +940,314 @@ export async function getExplorerTransactions(tableName: string) {
   return JSON.parse(JSON.stringify(rows));
 }
 
+export async function getExplorerIndexes(tableId: string) {
+  const q = `
+    SELECT id, name, isUnique, fields, description
+    FROM database_indexes
+    WHERE tableId = ?
+    ORDER BY name ASC
+  `;
+  const rows = await query<any>(q, [tableId]);
+  return JSON.parse(JSON.stringify(rows));
+}
+
+async function requireExplorerEditor() {
+  const session = await getSession();
+  const role = session.user?.role;
+
+  if (!role || !["admin", "superadmin"].includes(role)) {
+    throw new Error("Only admin and superadmin can add FORS Explorer records.");
+  }
+
+  return session;
+}
+
+function normalizeExplorerList(value?: string | null) {
+  if (!value) return null;
+
+  const items = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return items.length > 0 ? items.join(", ") : null;
+}
+
+export async function addMenuAction(data: {
+  title: string;
+  description?: string;
+  parentId?: string | null;
+  order?: number | string | null;
+}) {
+  const session = await requireExplorerEditor();
+  const title = data.title?.trim();
+
+  if (!title) {
+    throw new Error("Menu title is required.");
+  }
+
+  const id = generateId("MENU");
+  const description = data.description?.trim() || null;
+  const parentId = data.parentId?.trim() || null;
+  const orderValue = Number(data.order ?? 0);
+  const menuOrder = Number.isFinite(orderValue) ? orderValue : 0;
+
+  await execute(
+    `INSERT INTO menus (id, title, description, parentId, \`order\`, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))`,
+    [id, title, description, parentId, menuOrder]
+  );
+
+  await logActivity("INTEGRATION_UPDATED", {
+    userMatricule: session.user?.matricule,
+    details: {
+      message: `Created explorer menu ${title}`,
+      id,
+      entity: "menu",
+      title,
+      parentId,
+      order: menuOrder,
+    },
+  });
+
+  revalidatePath("/database");
+  return { success: true, id };
+}
+
+export async function addTableAction(data: {
+  name: string;
+  description?: string;
+  fieldsString?: string;
+  indexesString?: string;
+}) {
+  const session = await requireExplorerEditor();
+  const name = data.name?.trim();
+
+  if (!name) {
+    throw new Error("Table name is required.");
+  }
+
+  const id = generateId("TBL");
+  const description = data.description?.trim() || null;
+
+  await execute(
+    `INSERT INTO database_tables (id, name, description, createdAt, updatedAt)
+     VALUES (?, ?, ?, NOW(3), NOW(3))`,
+    [id, name, description]
+  );
+
+  if (data.fieldsString) {
+    const fields = data.fieldsString.split(",").map(s => s.trim()).filter(Boolean);
+    for (let i = 0; i < fields.length; i++) {
+      const fieldId = generateId("FLD");
+      await execute(
+        `INSERT INTO database_fields (id, name, type, length, nullable, description, tableId, createdAt, position, updatedAt)
+         VALUES (?, ?, 'VARCHAR', 255, 1, NULL, ?, NOW(3), ?, NOW(3))`,
+        [fieldId, fields[i], id, i]
+      );
+    }
+  }
+
+  if (data.indexesString) {
+    const indexes = data.indexesString.split(";").map(s => s.trim()).filter(Boolean);
+    for (const idx of indexes) {
+      const idxId = generateId("IDX");
+      const idxName = `idx_${idx.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 50)}`;
+      await execute(
+        `INSERT INTO database_indexes (id, name, isUnique, fields, tableId, createdAt, updatedAt, description)
+         VALUES (?, ?, 0, ?, ?, NOW(3), NOW(3), NULL)`,
+        [idxId, idxName, idx, id]
+      );
+    }
+  }
+
+  await logActivity("INTEGRATION_UPDATED", {
+    userMatricule: session.user?.matricule,
+    details: {
+      message: `Created explorer table ${name}`,
+      id,
+      entity: "database_table",
+      name,
+    },
+  });
+
+  revalidatePath("/database");
+  return { success: true, id };
+}
+
+export async function addTransactionAction(data: {
+  name: string;
+  description?: string;
+  pgmType?: string;
+  language?: string;
+  tables?: string;
+  pgms?: string;
+}) {
+  const session = await requireExplorerEditor();
+  const name = data.name?.trim();
+
+  if (!name) {
+    throw new Error("Transaction name is required.");
+  }
+
+  const id = generateId("TXN");
+  const description = data.description?.trim() || null;
+  const pgmType = data.pgmType?.trim() || null;
+  const language = data.language?.trim() || null;
+  const tables = normalizeExplorerList(data.tables);
+  const pgms = normalizeExplorerList(data.pgms);
+
+  await execute(
+    `INSERT INTO transactions (id, name, description, pgmType, language, tables, pgms, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))`,
+    [id, name, description, pgmType, language, tables, pgms]
+  );
+
+  await logActivity("INTEGRATION_UPDATED", {
+    userMatricule: session.user?.matricule,
+    details: {
+      message: `Created explorer transaction ${name}`,
+      id,
+      entity: "transaction",
+      name,
+      pgmType,
+      language,
+      tables,
+    },
+  });
+
+  revalidatePath("/database");
+  return { success: true, id };
+}
+
+export async function addFieldAction(data: {
+  tableId: string;
+  name: string;
+  type: string;
+  length?: number | string | null;
+  nullable?: boolean;
+  description?: string;
+  position?: number | string | null;
+}) {
+  const session = await requireExplorerEditor();
+  const tableId = data.tableId?.trim();
+  const name = data.name?.trim();
+  const type = data.type?.trim();
+
+  if (!tableId) {
+    throw new Error("A target table is required for the field.");
+  }
+
+  if (!name) {
+    throw new Error("Field name is required.");
+  }
+
+  if (!type) {
+    throw new Error("Field type is required.");
+  }
+
+  const id = generateId("FLD");
+  const description = data.description?.trim() || null;
+  const parsedLength = Number(data.length);
+  const length = Number.isFinite(parsedLength) && parsedLength > 0 ? parsedLength : null;
+  const parsedPosition = Number(data.position);
+  const position = Number.isFinite(parsedPosition) && parsedPosition >= 0 ? parsedPosition : 0;
+  const nullable = data.nullable ?? true;
+
+  const [table] = await query<any>(
+    "SELECT id, name FROM database_tables WHERE id = ? LIMIT 1",
+    [tableId],
+  );
+
+  if (!table) {
+    throw new Error("The selected table could not be found.");
+  }
+
+  await execute(
+    `INSERT INTO database_fields (id, name, type, length, nullable, description, tableId, createdAt, position, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3), ?, NOW(3))`,
+    [id, name, type, length, nullable ? 1 : 0, description, tableId, position],
+  );
+
+  await logActivity("INTEGRATION_UPDATED", {
+    userMatricule: session.user?.matricule,
+    details: {
+      message: `Created explorer field ${name}`,
+      id,
+      entity: "database_field",
+      tableId,
+      tableName: table.name,
+      name,
+      type,
+      position,
+    },
+  });
+
+  revalidatePath("/database");
+  return { success: true, id };
+}
+
+export async function addIndexAction(data: {
+  tableId: string;
+  name: string;
+  isUnique?: boolean;
+  fields: string;
+  description?: string;
+}) {
+  const session = await requireExplorerEditor();
+  const tableId = data.tableId?.trim();
+  const name = data.name?.trim();
+  const fields = normalizeExplorerList(data.fields);
+
+  if (!tableId) {
+    throw new Error("A target table is required for the index.");
+  }
+
+  if (!name) {
+    throw new Error("Index name is required.");
+  }
+
+  if (!fields) {
+    throw new Error("At least one indexed field is required.");
+  }
+
+  const id = generateId("IDX");
+  const description = data.description?.trim() || null;
+  const isUnique = data.isUnique ?? false;
+
+  const [table] = await query<any>(
+    "SELECT id, name FROM database_tables WHERE id = ? LIMIT 1",
+    [tableId],
+  );
+
+  if (!table) {
+    throw new Error("The selected table could not be found.");
+  }
+
+  await execute(
+    `INSERT INTO database_indexes (id, name, isUnique, fields, tableId, createdAt, updatedAt, description)
+     VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3), ?)`,
+    [id, name, isUnique ? 1 : 0, fields, tableId, description],
+  );
+
+  await logActivity("INTEGRATION_UPDATED", {
+    userMatricule: session.user?.matricule,
+    details: {
+      message: `Created explorer index ${name}`,
+      id,
+      entity: "database_index",
+      tableId,
+      tableName: table.name,
+      name,
+      fields,
+      isUnique,
+    },
+  });
+
+  revalidatePath("/database");
+  return { success: true, id };
+}
+
 /**
  * Updates a ticket's SAP module assignment.
  */
@@ -898,16 +1278,28 @@ export async function updateTicketSapModuleAction(ticketId: string, sapModule: s
  */
 export async function getNotificationsAction() {
   const q = `
-    SELECT 
+    (SELECT 
       'info' as type, 
-      CONCAT('New AI Analysis: ', incident_number) as title, 
+      CONCAT('Analysed: ', incident_number) as title, 
       root_cause as message, 
       created_at as timestamp,
       incident_number as linkId
     FROM ai_analysis 
-    WHERE consulted_at IS NULL
-    ORDER BY created_at DESC 
-    LIMIT 10
+    WHERE consulted_at IS NULL)
+    
+    UNION ALL
+    
+    (SELECT 
+      'alert' as type, 
+      CONCAT('New Ticket: ', number) as title, 
+      short_description as message, 
+      sys_created_on as timestamp,
+      number as linkId
+    FROM tickets
+    WHERE state = 'New')
+    
+    ORDER BY timestamp DESC 
+    LIMIT 15
   `;
   const rows = await query<any>(q);
   return JSON.parse(JSON.stringify(rows));
@@ -943,31 +1335,54 @@ export async function getEventLogsForTicketAction(ticketId: string) {
 
 /**
  * Executes a SQL preview for a ticket's suggested solution.
+ * Allows SELECT, INSERT, UPDATE, DELETE — CRUD preview is supported.
+ * Blocks DDL (DROP, ALTER, TRUNCATE, GRANT) for safety.
  */
 export async function executeSqlPreviewAction(ticketId: string, sql: string) {
-  const session = await getSession();
+  // Auth check — wrapped so a session redirect doesn't silently crash the action
+  try {
+    await getSession();
+  } catch {
+    return { success: false, columns: [], rows: [], error: "Session expired or unauthorized. Please refresh and log in again." };
+  }
 
-  // Safety check: Only SELECT allowed
-  const isDestructive = /drop|delete|truncate|alter|insert|update|grant/i.test(sql);
-  if (isDestructive) {
-    return { success: false, columns: [], rows: [], error: "Only SELECT queries are allowed for preview." };
+  // Guard: reject empty or whitespace-only SQL
+  const trimmed = sql.trim();
+  if (!trimmed) {
+    return { success: false, columns: [], rows: [], error: "No executable SQL — the AI generated a comment or empty query." };
+  }
+
+  // Safety check: Block destructive DDL only — DML (INSERT/UPDATE/DELETE) is allowed for preview
+  const isDdl = /^\s*(drop|alter|truncate|grant|revoke|create)\b/i.test(trimmed);
+  if (isDdl) {
+    return { success: false, columns: [], rows: [], error: "DDL statements (DROP, ALTER, TRUNCATE, GRANT) are not allowed in preview mode." };
   }
 
   try {
-    const results = await query<any>(sql);
-    const columns = results.length > 0 ? Object.keys(results[0]) : [];
+    const results = await query<any>(trimmed);
 
-    await logSqlExecutionAction(ticketId, sql, "success");
+    // MySQL2 always returns RowDataPacket[] (an Array) for SELECT queries,
+    // even when 0 rows match. For DML (INSERT/UPDATE/DELETE) it returns a
+    // ResultSetHeader plain object. Array.isArray() is the correct discriminator.
+    if (Array.isArray(results)) {
+      // SELECT result — may be empty
+      const columns = results.length > 0 ? Object.keys(results[0]) : [];
+      await logSqlExecutionAction(ticketId, trimmed, "success");
+      return { success: true, columns, rows: (results as any[]).slice(0, 100), error: null };
+    }
 
+    // DML result — ResultSetHeader object
+    const header = results as any;
+    const affectedRows = header?.affectedRows ?? 0;
+    await logSqlExecutionAction(ticketId, trimmed, "success");
     return {
       success: true,
-      columns,
-      rows: results.slice(0, 10), // Preview limit
+      columns: ['affectedRows', 'info'],
+      rows: [{ affectedRows, info: header?.info || 'Query executed successfully' }],
       error: null
     };
   } catch (err: any) {
-    await logSqlExecutionAction(ticketId, sql, "error");
-    return { success: false, columns: [], rows: [], error: err.message || "SQL Execution failed." };
+    try { await logSqlExecutionAction(ticketId, trimmed, "error"); } catch { }
+    return { success: false, columns: [], rows: [], error: err.message || "SQL execution failed." };
   }
 }
-

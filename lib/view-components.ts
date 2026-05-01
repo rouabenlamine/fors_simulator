@@ -1,7 +1,5 @@
 /**
  * View Control — Component Registry & Types
- * This is a plain (non-server, non-client) module so it can be imported
- * by both server actions and client components without restriction.
  */
 
 export const VIEW_COMPONENTS = [
@@ -42,12 +40,6 @@ export const VIEW_COMPONENTS = [
     category: "Dashboard",
   },
   {
-    id: "sql_console",
-    label: "SQL Console",
-    description: "Raw SQL execution terminal for admin-level database operations.",
-    category: "Admin",
-  },
-  {
     id: "activity_logs",
     label: "Activity Logs",
     description: "Full audit trail of user and system actions across the platform.",
@@ -69,13 +61,43 @@ export const VIEW_COMPONENTS = [
     id: "user_management",
     label: "User Management",
     description: "Create, update, and deactivate user accounts and roles.",
-    category: "Admin",
+    category: "Management",
   },
   {
     id: "kpi_config",
     label: "KPI Configuration",
     description: "Enable, disable, and customise KPI metric definitions.",
-    category: "Admin",
+    category: "Management",
+  },
+  {
+    id: "admin_control_panel",
+    label: "Admin Control Panel",
+    description: "Central administrative dashboard with system health and quick stats.",
+    category: "System",
+  },
+  {
+    id: "audit_logs",
+    label: "Audit Logs",
+    description: "System-level audit trail for administrative changes and security events.",
+    category: "System",
+  },
+  {
+    id: "view_permissions_management",
+    label: "View Permissions Manager",
+    description: "Interface for configuring role-based component visibility and access.",
+    category: "System",
+  },
+  {
+    id: "integration_hub",
+    label: "Integration Hub",
+    description: "Configure external service connections for ServiceNow, n8n, and AI providers.",
+    category: "System",
+  },
+  {
+    id: "system_db_explorer",
+    label: "Database Explorer",
+    description: "Unified system introspection: browse schemas, indexes, and execute raw SQL queries.",
+    category: "System",
   },
 ] as const;
 
@@ -83,7 +105,6 @@ export type ComponentId = (typeof VIEW_COMPONENTS)[number]["id"];
 
 export type RolePermissions = Record<ComponentId, boolean>;
 
-/** Build a default permissions map with every component visible. */
 export function buildDefaultPermissions(): RolePermissions {
   const perms: any = {};
   for (const c of VIEW_COMPONENTS) {

@@ -42,6 +42,47 @@ function stripJsonFences(raw: string): string {
 }
 
 /**
+ * SQL Sanitizer — enforces well-formed MariaDB syntax regardless of model output.
+ *
+ * Rules applied (in order):
+ *  1. Strip any lingering markdown SQL fences (```sql ... ```)
+ *  2. Trim surrounding whitespace
+ *  3. If the result is empty or a comment-only string, return the comment unchanged
+ *  4. Ensure the statement starts with a valid CRUD verb (SELECT / INSERT / UPDATE / DELETE)
+ *     — if the model prefixed the query with prose, we extract from the first verb
+ *  5. Collapse runs of whitespace to single spaces for readability
+ *  6. Guarantee the statement ends with exactly one semicolon
+ */
+function sanitizeSql(raw: string): string {
+    if (!raw) return '-- No SQL generated';
+
+    // 1. Strip markdown SQL fences
+    let sql = raw
+        .replace(/^```(?:sql)?\s*/im, '')
+        .replace(/\s*```$/m, '')
+        .trim();
+
+    // 2. If it's purely a comment (model correctly returned none), leave it alone
+    if (/^--/.test(sql)) return sql;
+
+    // 3. Find the first occurrence of a CRUD keyword and slice from there
+    const crudMatch = sql.match(/\b(SELECT|INSERT|UPDATE|DELETE)\b/i);
+    if (!crudMatch || crudMatch.index === undefined) {
+        // Model returned something that isn't SQL at all
+        return '-- No valid SQL statement detected in model output';
+    }
+    sql = sql.slice(crudMatch.index);
+
+    // 4. Collapse excessive whitespace
+    sql = sql.replace(/\s+/g, ' ').trim();
+
+    // 5. Ensure exactly one trailing semicolon
+    sql = sql.replace(/;*$/, '') + ';';
+
+    return sql;
+}
+
+/**
  * FIX 2: Normalize priority to one of the four valid urgency levels.
  * phi3 may return "Priority: high", "HIGH", "High Priority", etc.
  */
@@ -67,14 +108,19 @@ const prompt = `You are an expert IT Support AI. Analyze this support ticket acc
 Return ONLY valid JSON. No thinking, no markdown, no intro, no outro.
 
 JSON Keys:
-- issue_type: concise root cause category
-- priority: critical, high, medium, or low (one word only)
-- summary: detailed root cause analysis
-- possible_causes: list of possible root causes
-- recommended_actions: list of precise step-by-step solutions
-- impacted_tables: list of table names STRICTLY from the schema below. NEVER hallucinate table names or guess them from the ticket.
-- suggested_sql: ONE single valid SQL query. Ensure correct syntax and column names based EXACTLY on the <Schema>. Use proper JOINs if needed. Do not include markdown code block formatting.
-- IMPORTANT: If the <Schema> section says "No physical business tables found in the database.", DO NOT generate a technical SQL query. Instead, return: "-- No business tables exist in the database to query."
+- issue_type: concise root cause category (string)
+- priority: exactly one of: critical, high, medium, low
+- summary: detailed root cause analysis (string)
+- possible_causes: array of strings listing possible root causes
+- recommended_actions: array of strings listing precise step-by-step solutions
+- impacted_tables: array of table names taken STRICTLY from the <Schema> below. NEVER invent table names.
+- suggested_sql: ONE single MariaDB-compatible SQL query following ALL rules below:
+    RULE 1 — Start with exactly one of: SELECT, INSERT, UPDATE, DELETE (no other prefix allowed).
+    RULE 2 — End with a semicolon (;).
+    RULE 3 — Use ONLY table names and column names that exist in the <Schema>. Never guess.
+    RULE 4 — No markdown formatting, no backtick fences, no prose before or after the SQL.
+    RULE 5 — If <Schema> says "No physical business tables found", return the string: -- No business tables exist in the database to query.
+    EXAMPLE of correct output: SELECT id, name FROM orders WHERE status = 'pending';
 
 <Schema>
 ${datasetSchema}
@@ -134,6 +180,11 @@ Ticket: ${newTicket}`;
 
         // FIX 2: Normalize priority so urgency mapping in ai.ts never silently passes garbage
         parsed.priority = normalizePriority(parsed.priority);
+
+        // FIX 3: Sanitize the suggested SQL so it always starts with a CRUD verb and ends with ;
+        if (parsed.suggested_sql) {
+            parsed.suggested_sql = sanitizeSql(parsed.suggested_sql);
+        }
 
         return parsed;
     } catch (error: any) {

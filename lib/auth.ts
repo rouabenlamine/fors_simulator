@@ -29,11 +29,8 @@ export async function getSession(): Promise<SessionData> {
 
   const s = sessions[0];
   let sessionRole = s.role;
-  if (s.role === "it_support") sessionRole = "agent";
-  else if (s.role === "user") sessionRole = "reporter";
-  else if (s.role === "it_report") sessionRole = "reporter";
-  else if (s.role === "it_manager") sessionRole = "manager";
-  // 'admin' and 'superadmin' map to themselves
+  if (s.role === "user") sessionRole = "it_report";
+  // 'it_support', 'it_manager', 'it_report', 'admin', 'superadmin' map to themselves
 
   return {
     isLoggedIn: true,
@@ -151,12 +148,7 @@ export async function validateCredentials(
   }
 
   let mappedRole = user.role;
-  if (user.role === "it_support") mappedRole = "agent";
-  else if (user.role === "user") mappedRole = "reporter";
-  else if (user.role === "it_report") mappedRole = "reporter";
-  else if (user.role === "it_manager") mappedRole = "manager";
-  // If user.role is "admin" or "superadmin", keep mappedRole as is.
-  // Note: For backwards compatibility, if they were "manager" in DB they also stay "manager"
+  if (user.role === "user") mappedRole = "it_report";
 
   return {
     matricule: user.matricule,

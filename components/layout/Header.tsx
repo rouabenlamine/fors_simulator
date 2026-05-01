@@ -23,11 +23,12 @@ const notifIcon = {
 export function Header({ title, user, viewPermissions }: HeaderProps) {
   const router = useRouter();
   // Notifications ONLY for IT Support / Agent roles
-  const showNotifications = Boolean(user && (user.role === "agent" || user.role === "it_support"));
+  const showNotifications = Boolean(user && user.role === "it_support");
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [lastNotifId, setLastNotifId] = useState<string | null>(null);
   const [showToast, setShowToast] = useState<any>(null);
 
@@ -37,39 +38,52 @@ export function Header({ title, user, viewPermissions }: HeaderProps) {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dismissed_notifications");
+      if (stored) setDismissedIds(JSON.parse(stored));
+    }
+  }, []);
+
+  useEffect(() => {
     if (!showNotifications) return;
 
     async function fetchNotifs() {
       try {
         const data = await getNotificationsAction();
-        // Format relative time
-        const enriched = data.map((n: any) => ({
+        // Format relative time and create unique ID
+        const allFetched = data.map((n: any) => ({
           ...n,
-          id: n.linkId + n.timestamp + n.type, // Unique key
-          read: false, // For now keep it simple
+          id: n.linkId + n.timestamp + n.type,
+          read: false,
           time: new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
 
-        setNotifications(enriched);
+        // Filter out dismissed
+        const filtered = allFetched.filter((n: any) => !dismissedIds.includes(n.id));
 
-        // Toast logic for brand new notification
-        if (enriched.length > 0) {
-          const latest = enriched[0];
-          if (lastNotifId && latest.id !== lastNotifId) {
-            setShowToast(latest);
-            setTimeout(() => setShowToast(null), 5000);
+        // Toast logic for brand new arrivals in the database
+        if (allFetched.length > 0) {
+          const absoluteLatest = allFetched[0];
+
+          // Only toast if this is a new "absolute" latest ID we haven't seen before
+          // and it's not in the dismissed list
+          if (lastNotifId && absoluteLatest.id !== lastNotifId && !dismissedIds.includes(absoluteLatest.id)) {
+            setShowToast(absoluteLatest);
+            setTimeout(() => setShowToast(null), 8000);
           }
-          setLastNotifId(latest.id);
+          setLastNotifId(absoluteLatest.id);
         }
+
+        setNotifications(filtered);
       } catch (err) {
         console.error("Failed to fetch notifications", err);
       }
     }
 
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 20000); // 20s polling
+    const interval = setInterval(fetchNotifs, 15000); // Poll every 15s
     return () => clearInterval(interval);
-  }, [showNotifications, lastNotifId]);
+  }, [showNotifications, lastNotifId, dismissedIds]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -89,31 +103,25 @@ export function Header({ title, user, viewPermissions }: HeaderProps) {
   }
 
   function dismiss(id: string) {
+    const updated = [...dismissedIds, id];
+    setDismissedIds(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dismissed_notifications", JSON.stringify(updated));
+    }
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }
 
-  const initials = user ? `${user.name?.[0] || ""}${user.surname?.[0] || ""}`.toUpperCase() || "U" : "?";
-  const displayName = user ? `${user.name} ${user.surname || ""}`.trim() : null;
-  const displayRole = user ? user.role.replace("_", " ") : null;
 
   return (
-    <header className="h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-6 z-20">
-      {/* Page title — only shown when explicitly provided */}
-      {title ? (
-        <h1 className="text-base font-semibold text-slate-800">{title}</h1>
-      ) : (
-        <div /> /* spacer so right-side controls stay right-aligned */
-      )}
-
-      <div className="flex items-center gap-3">
-        {/* Notification Bell — conditionally shown via agent role */}
-        {showNotifications && (
+    <header className="absolute top-0 right-0 h-15 flex items-center justify-end px-5 z-30 pointer-events-none">
+      {showNotifications && (
+        <div className="flex items-center gap-4 pointer-events-auto bg-white/40 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.04)]">
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => { setNotifOpen((v) => !v); setProfileOpen(false); }}
-              className="relative w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+              className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-slate-100 hover:bg-slate-50 transition-all shadow-sm group"
             >
-              <Bell className="w-4 h-4 text-slate-500" />
+              <Bell className="w-4.5 h-4.5 text-slate-500 group-hover:text-indigo-500 transition-colors" />
               {unreadCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
                   {unreadCount}
@@ -179,61 +187,8 @@ export function Header({ title, user, viewPermissions }: HeaderProps) {
               </div>
             )}
           </div>
-        )}
-
-        {/* User Info with Profile Dropdown */}
-        {user ? (
-          <div className="relative" ref={profileRef}>
-            <button
-              onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}
-              className="flex items-center gap-2.5 pl-3 border-l border-gray-100 hover:bg-slate-50 p-1.5 rounded-lg transition-colors text-left"
-            >
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center text-[12px] font-bold text-white shadow-lg shadow-blue-500/20 shrink-0">
-                {initials}
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-800 mb-0.5">{displayName}</p>
-                <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">{displayRole}</p>
-              </div>
-            </button>
-
-            {/* Profile Dropdown */}
-            {profileOpen && (
-              <div className="absolute right-0 top-12 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                <div className="bg-slate-50 px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                    <UserIcon className="w-5 h-5 text-indigo-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800">My Profile</h3>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{user.role}</p>
-                  </div>
-                </div>
-                <div className="p-4 space-y-3">
-                  <div className="flex justify-between items-center border-b border-slate-50 pb-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Matricule</span>
-                    <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">{user.matricule}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b border-slate-50 pb-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Name</span>
-                    <span className="text-xs font-bold text-slate-800">{user.name}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Surname</span>
-                    <span className="text-xs font-bold text-slate-800">{user.surname || "—"}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2.5 pl-3 border-l border-gray-100">
-            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-[12px] font-bold text-slate-400">
-              ?
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Global Toast for new items */}
       {showToast && (
