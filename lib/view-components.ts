@@ -11,8 +11,10 @@ export const VIEW_COMPONENTS = [
   },
   {
     id: "chat_bubble",
-    label: "Chat Bubble",
-    description: "Floating GOST AI chat button visible across all dashboard pages.",
+    label: "Chat History",
+    icon: "MessageSquare",
+    componentId: "chat_bubble",
+    description: "FORS Agent chat sessions",
     category: "Header",
   },
   {

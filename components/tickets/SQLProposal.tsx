@@ -1,8 +1,8 @@
 "use client";
 
-import { Code2, Shield, Copy } from "lucide-react";
-import { Card, CardHeader, CardBody } from "@/components/ui/Card";
+import { Terminal, Shield, Copy, Check, Code2 } from "lucide-react";
 import { useState } from "react";
+import { clsx } from "clsx";
 
 interface SQLProposalProps {
   sql: string;
@@ -14,40 +14,48 @@ export function SQLProposal({ sql }: SQLProposalProps) {
   function handleCopy() {
     navigator.clipboard.writeText(sql).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), 2000);
     });
   }
 
   return (
-    <div className="bg-slate-900/90 backdrop-blur-xl rounded-[1.5rem] border border-slate-700/60 shadow-[0_8px_30px_rgb(0,0,0,0.2)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(99,102,241,0.2)] transition-all duration-300">
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <div className="px-5 py-4 border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm relative z-10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
-              <Code2 className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-[15px] font-black text-white tracking-tight">SQL Solution</span>
+    <div className="bg-[#0A1628] rounded-[1.5rem] border border-white/10 shadow-2xl relative overflow-hidden group">
+      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500" />
+
+      <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between bg-white/5 backdrop-blur-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
+            <Code2 className="w-3.5 h-3.5 text-white" />
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest uppercase text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-lg shadow-sm">
-              <Shield className="w-3.5 h-3.5" />
-              <span>DBA approval required</span>
-            </div>
-            <button
-              onClick={handleCopy}
-              className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
+          <span className="text-[9px] font-black text-indigo-200 uppercase tracking-[0.2em]">Script_Output.sql</span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleCopy}
+            className={clsx(
+              "text-[8px] font-black uppercase tracking-widest flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all border",
+              copied
+                ? "bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-500/30"
+                : "bg-white/5 text-indigo-300 hover:text-white border-white/10 hover:border-white/20 shadow-lg"
+            )}
+          >
+            {copied ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+            {copied ? "COPIED" : "CLONE"}
+          </button>
         </div>
       </div>
-      <div className="p-5 relative z-10">
-        <pre className="text-[13px] text-indigo-200 font-mono font-medium bg-slate-950/50 rounded-xl p-5 overflow-x-auto leading-relaxed whitespace-pre-wrap border border-slate-800 shadow-inner">
-          {sql}
-        </pre>
+
+      <div className="p-4">
+        <div className="relative group/code">
+          <div className="absolute top-2.5 left-3 flex gap-1 opacity-30 group-hover/code:opacity-100 transition-opacity">
+            <div className="w-2 h-2 rounded-full bg-rose-500" />
+            <div className="w-2 h-2 rounded-full bg-amber-500" />
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          </div>
+          <pre className="text-[11px] text-indigo-100 font-mono font-bold bg-black/40 rounded-xl p-6 pt-8 overflow-x-auto leading-relaxed border border-white/5 shadow-inner custom-scrollbar min-h-[80px] selection:bg-indigo-500/30">
+            {sql}
+          </pre>
+        </div>
       </div>
     </div>
   );

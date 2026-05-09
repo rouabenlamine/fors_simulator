@@ -1117,7 +1117,7 @@
       "Extra": ""
     },
     {
-      "Field": "prenom",
+      "Field": "surname",
       "Type": "varchar(100)",
       "Null": "YES",
       "Key": "",

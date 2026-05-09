@@ -36,12 +36,12 @@ async function runReset() {
 
     console.log("Creating strict new records...");
     await pool.query(
-      `INSERT INTO users (matricule, username, name, prenom, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`, 
+      `INSERT INTO users (matricule, username, name, surname, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`, 
       ['ADMIN_X1', 'admin_x1', 'Regional', 'Admin', 'admin@example.com', adminHash, 'admin']
     );
     
     await pool.query(
-      `INSERT INTO users (matricule, username, name, prenom, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`, 
+      `INSERT INTO users (matricule, username, name, surname, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`, 
       ['SUPER_X1', 'super_x1', 'Global', 'Superadmin', 'super@example.com', superadminHash, 'superadmin']
     );
 

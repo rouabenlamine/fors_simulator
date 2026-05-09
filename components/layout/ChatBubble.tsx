@@ -4,19 +4,20 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageSquare, X, Send, Bot, Hash } from "lucide-react";
 import type { User } from "@/lib/types";
 import { usePathname, useSearchParams } from "next/navigation";
-import { chatWithGostAction } from "@/app/actions";
+import { chatWithAgentAction } from "@/app/actions";
+import { clsx } from "clsx";
 
 interface ChatBubbleProps {
   user?: User;
 }
 
 interface Message {
-  sender: "user" | "gost" | "system";
+  sender: "user" | "agent" | "system";
   content: string;
   time: string;
 }
 
-const STORAGE_KEY = "gost_chat_state";
+const STORAGE_KEY = "agent_chat_state";
 
 function now() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -51,7 +52,7 @@ function persistState(
       STORAGE_KEY,
       JSON.stringify({ messages, activeTicketId, detectedTicket })
     );
-  } catch {}
+  } catch { }
 }
 
 export function ChatBubble({ user }: ChatBubbleProps) {
@@ -83,10 +84,10 @@ export function ChatBubble({ user }: ChatBubbleProps) {
     } else {
       // First launch — seed a welcome message
       const welcome: Message = {
-        sender: "gost",
+        sender: "agent",
         content: pageTicketId
           ? `Hello! Context loaded for Ticket ${pageTicketId}. How can I assist you?`
-          : "Hello! I am the FORS AGENT. Mention an INC number to link a ticket, or ask me anything.",
+          : "Hello! I am the FORS Agent. Mention an INC number to link a ticket, or ask me anything.",
         time: now(),
       };
       setMessages([welcome]);
@@ -162,17 +163,17 @@ export function ChatBubble({ user }: ChatBubbleProps) {
       const gHistory = messages
         .filter((m) => m.sender !== "system")
         .map((m) => ({
-          role: m.sender === "gost" ? "assistant" : "user",
+          role: m.sender === "agent" ? "assistant" : "user",
           content: m.content,
         }));
-      const reply = await chatWithGostAction(resolvedTicketId, input, gHistory);
-      setMessages((prev) => [...prev, { sender: "gost", content: reply, time: now() }]);
+      const reply = await chatWithAgentAction(resolvedTicketId, input, gHistory);
+      setMessages((prev) => [...prev, { sender: "agent", content: reply, time: now() }]);
     } catch {
       setMessages((prev) => [
         ...prev,
         {
-          sender: "gost",
-          content: "Service error. Please check if the AI service is running.",
+          sender: "agent",
+          content: "I'm having trouble connecting to the neural link. Is your local FORS Agent running?",
           time: now(),
         },
       ]);
@@ -183,7 +184,7 @@ export function ChatBubble({ user }: ChatBubbleProps) {
 
   const clearHistory = useCallback(() => {
     const fresh: Message = {
-      sender: "gost",
+      sender: "agent",
       content: detectedTicket
         ? `New session started for Ticket ${detectedTicket}.`
         : "New session started. Mention an INC number to link a ticket.",
@@ -203,21 +204,20 @@ export function ChatBubble({ user }: ChatBubbleProps) {
         <div className="w-80 bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden animate-slide-up">
           {/* Header */}
           <div
-            className="px-4 py-3 flex items-center justify-between"
-            style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)" }}
+            className="px-4 py-3 flex items-center justify-between bg-gradient-to-br from-indigo-600 to-violet-700"
           >
             <div className="flex items-center gap-2">
               <div className="relative">
-                <div className="w-2 h-2 bg-green-400 rounded-full" />
-                <div className="absolute inset-0 w-2 h-2 bg-green-400 rounded-full animate-ping opacity-75" />
+                <div className="w-2 h-2 bg-emerald-400 rounded-full" />
+                <div className="absolute inset-0 w-2 h-2 bg-emerald-400 rounded-full animate-ping opacity-75" />
               </div>
-              <Bot className="w-4 h-4 text-blue-200" />
-              <span className="text-sm font-semibold text-white">FORS Agent</span>
-              <span className="text-[10px] bg-blue-700/50 text-blue-200 px-1.5 py-0.5 rounded-full ml-1">AI</span>
+              <Bot className="w-4 h-4 text-white/80" />
+              <span className="text-[13px] font-black text-white tracking-tight uppercase">FORS Agent</span>
+              <span className="text-[9px] bg-white/20 text-white px-1.5 py-0.5 rounded-lg font-black uppercase tracking-widest ml-1 backdrop-blur-md">AI</span>
             </div>
             <div className="flex items-center gap-2">
               {detectedTicket && (
-                <span className="flex items-center gap-1 text-[9px] bg-emerald-600/80 text-white px-2 py-0.5 rounded-full font-bold">
+                <span className="flex items-center gap-1 text-[9px] bg-white/10 text-white px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border border-white/10 backdrop-blur-sm">
                   <Hash className="w-2.5 h-2.5" />
                   {detectedTicket}
                 </span>
@@ -226,15 +226,15 @@ export function ChatBubble({ user }: ChatBubbleProps) {
               <button
                 onClick={clearHistory}
                 title="Clear conversation"
-                className="text-blue-300/70 hover:text-white transition-colors text-[10px] font-semibold px-1.5 py-0.5 rounded hover:bg-white/10"
+                className="text-white/60 hover:text-white transition-colors text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-lg hover:bg-white/10"
               >
                 Clear
               </button>
               <button
                 onClick={() => setOpen(false)}
-                className="text-blue-300 hover:text-white transition-colors"
+                className="text-white/60 hover:text-white transition-colors p-1"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -256,35 +256,30 @@ export function ChatBubble({ user }: ChatBubbleProps) {
                   key={i}
                   className={`flex items-end gap-1.5 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  {msg.sender === "gost" && (
+                  {msg.sender === "agent" && (
                     <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mb-0.5"
-                      style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)" }}
+                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mb-0.5 bg-gradient-to-br from-indigo-500 to-violet-600 shadow-sm"
                     >
                       <Bot className="w-3 h-3 text-white" />
                     </div>
                   )}
                   <div className="flex flex-col gap-0.5 max-w-[78%]">
                     <div
-                      className={`px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                      className={clsx(
+                        "px-3 py-2 rounded-xl text-[12px] leading-relaxed font-bold",
                         msg.sender === "user"
-                          ? "text-white rounded-br-sm"
-                          : "bg-white border border-gray-200 text-slate-700 rounded-bl-sm shadow-sm"
-                      }`}
-                      style={
-                        msg.sender === "user"
-                          ? { background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)" }
-                          : {}
-                      }
+                          ? "bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-br-sm shadow-md shadow-indigo-200/50"
+                          : "bg-white border border-slate-200 text-slate-700 rounded-bl-sm shadow-sm"
+                      )}
                     >
                       {msg.content}
                     </div>
-                    <p className={`text-[9px] text-slate-400 ${msg.sender === "user" ? "text-right" : "text-left"}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1 ${msg.sender === "user" ? "text-right" : "text-left"}`}>
                       {msg.time}
                     </p>
                   </div>
                   {msg.sender === "user" && (
-                    <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shrink-0 mb-0.5 text-[8px] font-bold text-white">
+                    <div className="w-6 h-6 bg-slate-900 rounded-lg flex items-center justify-center shrink-0 mb-0.5 text-[8px] font-black text-white shadow-sm ring-1 ring-white/20">
                       {senderInitials}
                     </div>
                   )}
@@ -295,16 +290,15 @@ export function ChatBubble({ user }: ChatBubbleProps) {
             {typing && (
               <div className="flex items-end gap-1.5">
                 <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-                  style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)" }}
+                  className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 bg-gradient-to-br from-indigo-500 to-violet-600 shadow-sm"
                 >
                   <Bot className="w-3 h-3 text-white" />
                 </div>
-                <div className="bg-white border border-gray-200 px-3 py-2 rounded-xl rounded-bl-sm shadow-sm">
+                <div className="bg-white border border-slate-200 px-3 py-2 rounded-xl rounded-bl-sm shadow-sm">
                   <div className="flex gap-1 items-center h-3">
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               </div>
@@ -328,8 +322,7 @@ export function ChatBubble({ user }: ChatBubbleProps) {
             <button
               onClick={send}
               disabled={!input.trim()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-40 hover:scale-105"
-              style={{ background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)" }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-40 hover:scale-105 bg-gradient-to-br from-indigo-600 to-violet-600 shadow-lg shadow-indigo-200"
             >
               <Send className="w-3.5 h-3.5 text-white" />
             </button>
@@ -341,19 +334,20 @@ export function ChatBubble({ user }: ChatBubbleProps) {
       <div className="relative">
         {!open && (
           <span
-            className="absolute inset-0 rounded-full animate-ping-slow"
-            style={{ backgroundColor: "rgba(59, 130, 246, 0.35)" }}
+            className="absolute inset-0 rounded-full animate-ping-slow bg-indigo-400/20"
           />
         )}
         <button
           onClick={() => setOpen((v) => !v)}
-          className={`relative w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110 ${open ? "" : "animate-float"}`}
-          style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)" }}
+          className={clsx(
+            "relative w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all hover:scale-110 bg-gradient-to-br from-indigo-600 to-violet-700",
+            !open && "animate-float"
+          )}
         >
-          <MessageSquare className="w-5 h-5 text-white" />
-          {messages.filter((m) => m.sender === "gost").length > 1 && !open && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
-              {messages.filter((m) => m.sender === "gost").length}
+          <MessageSquare className="w-6 h-6 text-white" />
+          {messages.filter((m) => m.sender === "agent").length > 1 && !open && (
+            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 rounded-lg text-[10px] font-black text-white flex items-center justify-center shadow-lg border-2 border-white ring-2 ring-rose-100">
+              {messages.filter((m) => m.sender === "agent").length}
             </span>
           )}
         </button>

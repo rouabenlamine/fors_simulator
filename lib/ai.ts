@@ -9,7 +9,7 @@ export interface AnalysisResult {
   impactedTables: { name: string; confidence: number }[];
   sqlProposal: string;
   recommendation: string;
-  gostSummary: string;
+  agentSummary: string;
 }
 
 // ─── Dataset Schema Loader ───────────────────────────────────────────────────
@@ -95,7 +95,7 @@ export async function generateAnalysisWithOllama(
         impactedTables: [],
         sqlProposal: "-- Automated analysis unavailable",
         recommendation: "The system was unable to produce an automated resolution. Please retry or escalate to an engineer.",
-        gostSummary: "Analysis failed. Please retry later.",
+        agentSummary: "Analysis failed. Please retry later.",
       };
     }
 
@@ -129,7 +129,7 @@ export async function generateAnalysisWithOllama(
       recommendation: incidentAnalysis.recommended_actions
         ? incidentAnalysis.recommended_actions.join("\n")
         : "Refer to issue type and possible causes above",
-      gostSummary: `Issue: ${incidentAnalysis.issue_type || "Unknown"} | Causes: ${incidentAnalysis.possible_causes?.join(", ") || "See analysis"
+      agentSummary: `Issue: ${incidentAnalysis.issue_type || "Unknown"} | Causes: ${incidentAnalysis.possible_causes?.join(", ") || "See analysis"
         }`,
     };
   } catch (error: any) {
@@ -142,12 +142,12 @@ export async function generateAnalysisWithOllama(
       impactedTables: [],
       sqlProposal: "-- Automated analysis unavailable",
       recommendation: "The automated analysis service is temporarily unavailable. Please retry the analysis or escalate to a support engineer.",
-      gostSummary: "Analysis failed. Please retry later.",
+      agentSummary: "Analysis failed. Please retry later.",
     };
   }
 }
 
-// ─── GOST Chat Response ──────────────────────────────────────────────────────
+// ─── FORS Agent Chat Response ────────────────────────────────────────────────
 
 const OFF_TOPIC_REPLY =
   "I can only answer questions about this specific ticket. Please ask something related to the incident, its diagnosis, or its resolution.";
@@ -174,7 +174,7 @@ function isOnTopic(message: string, ticket: any | null): boolean {
   return true;
 }
 
-export async function getGostChatResponse(
+export async function getAgentChatResponse(
   userMessage: string,
   history: { role: string; content: string }[] = [],
   ticketContext: any | null = null,
@@ -201,7 +201,7 @@ ${ticketContext.suggested_sql ? `  AI SQL Proposal: ${ticketContext.suggested_sq
 ${ticketContext.resolution_steps ? `  AI Resolution  : ${ticketContext.resolution_steps}` : ""}`;
   }
 
-  const systemPrompt = `You are GOST, the FORS IT support assistant, operating inside an incident ticket session.
+  const systemPrompt = `You are FORS Agent, the FORS IT support assistant, operating inside an incident ticket session.
 
 Your job is to help the user investigate, understand, and resolve the ACTIVE TICKET. You are a technical expert.
 
@@ -248,7 +248,7 @@ ${ticketBlock}`;
 
     if (!response.ok) {
       console.error(`[Ollama Chat] Server error: ${response.status}`);
-      return "GOST chat service temporarily unavailable. Please try again.";
+      return "FORS Agent chat service temporarily unavailable. Please try again.";
     }
 
     const data = await response.json();
@@ -285,7 +285,7 @@ ${ticketBlock}`;
     const message = err.name === "AbortError"
       ? "Chat request timed out"
       : err.message || "Unknown error";
-    console.error("[getGostChatResponse] Error:", message);
-    return `GOST offline. Please check your local AI server (run \`ollama serve\` with phi3 model).`;
+    console.error("[getAgentChatResponse] Error:", message);
+    return `FORS Agent offline. Please check your local AI server (run \`ollama serve\` with phi3 model).`;
   }
 }

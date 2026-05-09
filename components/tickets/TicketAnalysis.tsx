@@ -1,88 +1,74 @@
 "use client";
 
-import { AlertTriangle, Database, CheckCircle, Bot } from "lucide-react";
+import { Database, CheckCircle, Bot, Zap, Search, Target, Sparkles } from "lucide-react";
 import type { TicketAnalysis as TAnalysis } from "@/lib/types";
-import { Card, CardHeader, CardBody } from "@/components/ui/Card";
+import { clsx } from "clsx";
 
 interface TicketAnalysisProps {
   analysis: TAnalysis;
 }
 
-const urgencyColors = {
-  critical: "text-red-700 bg-red-50 border border-red-200",
-  high: "text-orange-700 bg-orange-50 border border-orange-200",
-  medium: "text-yellow-700 bg-yellow-50 border border-yellow-200",
-  low: "text-green-700 bg-green-50 border border-green-200",
-};
-
-const urgencyBar = {
-  critical: "#ef4444",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#22c55e",
-};
-
 export function TicketAnalysis({ analysis }: TicketAnalysisProps) {
   return (
     <div className="space-y-4">
-      {/* Root Cause */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-[1.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(37,99,235,0.15)] transition-all duration-300">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-        <div className="px-5 py-4 border-b border-white/40 bg-white/30 backdrop-blur-sm relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <Bot className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-[15px] font-black text-slate-800 tracking-tight">Root Cause Analysis</span>
-          </div>
+      {/* ─── AI Diagnostic Header ─── */}
+      <div className="flex items-center justify-between px-1 mb-1">
+        <div className="flex items-center gap-1.5">
+          <Bot className="w-3.5 h-3.5 text-indigo-600" />
+          <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">FORS Agent Intelligence</h3>
         </div>
-        <div className="p-5 relative z-10">
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-gradient-to-br from-red-50 to-rose-50 border border-red-100/50 shadow-inner">
-            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-red-500 drop-shadow-sm" />
-            <p className="text-sm font-semibold text-red-800 leading-relaxed">{analysis.rootCause}</p>
+        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 rounded-lg border border-indigo-100">
+          <Sparkles className="w-2.5 h-2.5 text-indigo-500" />
+          <span className="text-[8px] font-black text-indigo-600 uppercase">Analysis Active</span>
+        </div>
+      </div>
+
+      {/* Root Cause Analysis */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden group hover:border-indigo-400 transition-all duration-300">
+        <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-lg flex items-center justify-center shadow-md">
+              <Target className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.15em]">Root Cause</span>
+          </div>
+          <Zap className="w-3 h-3 text-amber-500 fill-amber-500 animate-pulse" />
+        </div>
+        <div className="p-3">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-inner group-hover:bg-white group-hover:border-indigo-100 transition-colors">
+            <p className="text-[11px] font-black text-slate-700 leading-relaxed italic whitespace-pre-wrap">
+              &quot;{analysis.rootCause?.replace(/\\n/g, '\n')}&quot;
+            </p>
           </div>
         </div>
       </div>
 
       {/* Impacted Tables */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-[1.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(249,115,22,0.15)] transition-all duration-300">
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-        <div className="px-5 py-4 border-b border-white/40 bg-white/30 backdrop-blur-sm relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
-              <Database className="w-4 h-4 text-white" />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden group hover:border-violet-400 transition-all duration-300">
+        <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-gradient-to-br from-violet-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md">
+              <Database className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-[15px] font-black text-slate-800 tracking-tight">Impacted Tables</span>
+            <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.15em]">Impacted Entities</span>
           </div>
         </div>
-        <div className="p-5 space-y-3 relative z-10">
-          {analysis.impactedTables.map((table) => {
-            const barColor = table.confidence >= 90 ? "#10b981" : table.confidence >= 70 ? "#3b82f6" : "#f97316";
+        <div className="p-3 space-y-1.5">
+          {analysis.impactedTables.map((table: any) => {
+            const barColor = table.confidence >= 90 ? "bg-emerald-500" : table.confidence >= 70 ? "bg-indigo-500" : "bg-amber-500";
             return (
-              <div key={table.name} className="flex items-center justify-between p-3.5 bg-white/50 backdrop-blur-sm rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow group/item">
-                <div className="flex items-center gap-3">
-                  <code className="text-[13px] text-orange-600 font-mono font-black">{table.name}</code>
-                  {table.lossRate && (
-                    <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-md font-black tracking-widest shadow-sm">
-                      {table.lossRate}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-4">
-                  {table.lostDays && (
-                    <span className="text-[11px] text-slate-500 font-bold">-{table.lostDays}d</span>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                      <div
-                        className="h-full rounded-full shadow-[0_0_8px_rgba(255,255,255,0.5)]"
-                        style={{ width: `${table.confidence}%`, backgroundColor: barColor }}
-                      />
-                    </div>
-                    <span className="text-[11px] font-black w-8 text-right" style={{ color: barColor }}>
-                      {table.confidence}%
-                    </span>
+              <div key={table.name} className="flex items-center justify-between px-2.5 py-2 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all group/item cursor-default">
+                <code className="text-[10px] text-slate-900 font-mono font-black tracking-tight">{table.name}</code>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-12 h-1 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                    <div
+                      className={clsx("h-full rounded-full transition-all duration-1000 ease-out", barColor)}
+                      style={{ width: `${table.confidence}%` }}
+                    />
                   </div>
+                  <span className="text-[8px] font-black w-6 text-right text-slate-500 group-hover/item:text-slate-900">
+                    {table.confidence}%
+                  </span>
                 </div>
               </div>
             );
@@ -90,20 +76,24 @@ export function TicketAnalysis({ analysis }: TicketAnalysisProps) {
         </div>
       </div>
 
-      {/* Recommendation */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-[1.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(16,185,129,0.15)] transition-all duration-300">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-        <div className="px-5 py-4 border-b border-white/40 bg-white/30 backdrop-blur-sm relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <CheckCircle className="w-4 h-4 text-white" />
+      {/* Resolution Steps */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden group hover:border-emerald-400 transition-all duration-300">
+        <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-lg flex items-center justify-center shadow-md">
+              <CheckCircle className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-[15px] font-black text-slate-800 tracking-tight">Recommended Solution</span>
+            <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.15em]">Remediation</span>
           </div>
         </div>
-        <div className="p-5 relative z-10">
-          <div className="bg-emerald-50/50 backdrop-blur-sm border border-emerald-100 rounded-xl p-5 shadow-inner">
-            <p className="text-sm font-semibold text-slate-700 leading-relaxed">{analysis.recommendation}</p>
+        <div className="p-3">
+          <div className="p-4 bg-emerald-50/40 border border-emerald-100 rounded-xl shadow-inner border-dashed relative group-hover:bg-emerald-50/80 transition-colors">
+             <div className="absolute top-2 right-3">
+               <Zap className="w-3 h-3 text-emerald-500" />
+             </div>
+            <p className="text-[11px] font-bold text-emerald-800 leading-relaxed whitespace-pre-wrap">
+              {analysis.recommendation?.replace(/\\n/g, '\n')}
+            </p>
           </div>
         </div>
       </div>

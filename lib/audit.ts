@@ -18,6 +18,7 @@ export type AuditAction =
   | "KPI_UPDATED"
   | "XML_TICKET_IMPORTED"
   | "VIEW_PERMISSIONS_UPDATED"
+  | "REPORT_GENERATED"
   | "LOGIN"
   | "LOGOUT";
 

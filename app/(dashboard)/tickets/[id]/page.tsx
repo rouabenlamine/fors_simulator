@@ -1,601 +1,580 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getTicketById, getAnalyses, analyzeTicketAction } from "@/app/actions";
-import type { Ticket, TicketAnalysis as TicketAnalysisType } from "@/lib/types";
+import { getTicketById, getTicketAnalysisAction, updateTicketStatusAction, addTicketCommentAction } from "@/app/actions";
+import type { Ticket, TicketAnalysis as TAnalysis, TicketEventLog } from "@/lib/types";
 import { TicketAnalysis } from "@/components/tickets/TicketAnalysis";
 import { SQLProposal } from "@/components/tickets/SQLProposal";
 import { ApproveRejectBar } from "@/components/tickets/ApproveRejectBar";
-import { STATUS_LABELS, STATUS_COLORS, PRIORITY_COLORS } from "@/lib/constants";
-import { ArrowLeft, Calendar, Zap, RefreshCw, MessageSquare, CheckCircle, Bot } from "lucide-react";
+import { STATUS_LABELS } from "@/lib/constants";
+import { ArrowLeft, Zap, RefreshCw, MessageSquare, CheckCircle, Bot, Database, Activity, Shield, Hash, Layers, User, Clock, Terminal, Send } from "lucide-react";
 import Link from "next/link";
 import { executeSqlPreviewAction, getEventLogsForTicketAction, updateTicketSapModuleAction } from "@/app/actions";
+import { clsx } from "clsx";
 
 const SAP_MODULES = [
   { value: "", label: "Auto-Detect / Select Module", group: "default" },
-  { value: "FI", label: "FI — Financial Accounting", group: "Core" },
-  { value: "CO", label: "CO — Controlling", group: "Core" },
-  { value: "MM", label: "MM — Materials Management", group: "Core" },
-  { value: "SD", label: "SD — Sales & Distribution", group: "Core" },
-  { value: "PP", label: "PP — Production Planning", group: "Core" },
-  { value: "HCM", label: "HCM — Human Capital Mgmt", group: "Core" },
-  { value: "QM", label: "QM — Quality Management", group: "Additional" },
-  { value: "PM", label: "PM — Plant Maintenance", group: "Additional" },
-  { value: "PS", label: "PS — Project System", group: "Additional" },
-  { value: "WM/EWM", label: "WM/EWM — Warehouse Mgmt", group: "Additional" },
-  { value: "ABAP", label: "ABAP — Development", group: "Technical" },
-  { value: "BTP", label: "BTP — Business Technology Platform", group: "Technical" },
+  { value: "MM", label: "MM - Materials Management", group: "Logistics" },
+  { value: "PP", label: "PP - Production Planning", group: "Logistics" },
+  { value: "SD", label: "SD - Sales and Distribution", group: "Logistics" },
+  { value: "FI", label: "FI - Financial Accounting", group: "Finance" },
+  { value: "CO", label: "CO - Controlling", group: "Finance" },
+  { value: "QM", label: "QM - Quality Management", group: "Quality" },
+  { value: "PM", label: "PM - Plant Maintenance", group: "Maintenance" },
 ];
 
-const getSapModuleColor = (mod: string) => {
-  if (!mod) return "bg-slate-100 text-slate-500 border-slate-200";
-  const coreModules = ["FI", "CO", "MM", "SD", "PP", "HCM"];
-  const techModules = ["ABAP", "BTP"];
-  if (coreModules.includes(mod)) return "bg-indigo-50 text-indigo-700 border-indigo-200";
-  if (techModules.includes(mod)) return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-teal-50 text-teal-700 border-teal-200";
-};
-
-const SAP_KEYWORDS: Record<string, string[]> = {
-  FI: ["invoice", "payment", "ledger", "gl account", "posting", "fiscal", "financial", "accounting", "bank", "tax", "account", "dunning", "credit memo", "debit memo"],
-  CO: ["cost center", "profit center", "controlling", "overhead", "internal order", "pa ", "profitability", "costing", "budget", "allocation", "activity type"],
-  MM: ["purchase order", "material", "vendor", "procurement", "goods receipt", "inventory", "stock", "warehouse", "po ", "requisition", "grir", "migo", "miro"],
-  SD: ["sales order", "delivery", "billing", "customer", "shipping", "pricing", "invoicing", "va01", "vl01", "sales", "quotation", "contract"],
-  PP: ["production", "bom", "routing", "work order", "manufacturing", "mrp", "capacity", "shop floor", "co01"],
-  HCM: ["employee", "payroll", "personnel", "attendance", "leave", "hr ", "successfactors", "benefits", "hcm", "pa30", "pa20"],
-  QM: ["quality", "inspection", "defect", "calibration", "qa ", "qm ", "lot", "quality control", "certificate"],
-  PM: ["maintenance", "plant maintenance", "functional location", "equipment", "notification", "iw21", "iw31"],
-  PS: ["project", "wbs", "project system", "milestone", "cj20n", "network", "activity"],
-  "WM/EWM": ["storage bin", "transfer order", "putaway", "picking", "ewm", "wm ", "warehouse management", "bin", "rf ", "scanner"],
-  ABAP: ["abap", "program", "function module", "enhancement", "badi", "user exit", "smartform", "rfc", "idoc", "bapi", "se38", "se11", "se80", "cl_", "zcl_", "zif_"],
-  BTP: ["btp", "cloud", "fiori", "odata", "integration suite", "sap cloud", "cpi", "bas ", "launchpad", "ui5", "cap "],
-};
-
-function detectSapModule(title: string, description: string): string {
-  const text = `${title} ${description}`.toLowerCase();
-  let bestModule = "";
-  let bestScore = 0;
-  for (const [mod, keywords] of Object.entries(SAP_KEYWORDS)) {
-    let score = 0;
-    for (const kw of keywords) {
-      if (text.includes(kw.toLowerCase())) {
-        // Multi-word keywords get a higher score
-        score += kw.split(" ").length;
-      }
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      bestModule = mod;
-    }
-  }
-  // Lowered threshold to 1 for better responsiveness
-  return bestScore >= 1 ? bestModule : "";
-}
-
-/** Parse a validated close_notes string into structured analysis sections */
-function parseCloseNotes(notes: string) {
-  const result: { rootCause?: string; resolutionSteps?: string; suggestedSql?: string; validatedBy?: string; confidence?: string } = {};
-  if (!notes || !notes.startsWith("=== AI Analysis Report ===")) return null;
-  const validatedByMatch = notes.match(/^Validated by: (.+)$/m);
-  const confidenceMatch = notes.match(/^Confidence: (.+)$/m);
-  const rootCauseMatch = notes.match(/--- Root Cause ---\n([\s\S]+?)(?=\n---|\n===|$)/);
-  const resolutionMatch = notes.match(/--- Resolution Steps ---\n([\s\S]+?)(?=\n---|\n===|$)/);
-  const sqlMatch = notes.match(/--- Suggested SQL ---\n([\s\S]+?)(?=\n---|\n===|$)/);
-  if (validatedByMatch) result.validatedBy = validatedByMatch[1].trim();
-  if (confidenceMatch) result.confidence = confidenceMatch[1].trim();
-  if (rootCauseMatch) result.rootCause = rootCauseMatch[1].trim();
-  if (resolutionMatch) result.resolutionSteps = resolutionMatch[1].trim();
-  if (sqlMatch) result.suggestedSql = sqlMatch[1].trim();
-  return result;
+function getSapModuleColor(module: string) {
+  if (!module) return "text-slate-400 bg-slate-50 border-slate-100";
+  const m = SAP_MODULES.find(sm => sm.value === module);
+  if (m?.group === "Logistics") return "text-blue-600 bg-blue-50 border-blue-100";
+  if (m?.group === "Finance") return "text-emerald-600 bg-emerald-50 border-emerald-100";
+  if (m?.group === "Quality") return "text-amber-600 bg-amber-50 border-amber-100";
+  if (m?.group === "Maintenance") return "text-rose-600 bg-rose-50 border-rose-100";
+  return "text-indigo-600 bg-indigo-50 border-indigo-100";
 }
 
 export default function TicketDetailPage() {
-  const params = useParams<{ id: string }>();
+  const { id } = useParams();
   const router = useRouter();
-  const id = params?.id ?? "";
-
   const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [analysis, setAnalysis] = useState<TicketAnalysisType | null>(null);
-  const [status, setStatus] = useState("pending");
+  const [analysis, setAnalysis] = useState<TAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-
+  const [eventLogs, setEventLogs] = useState<TicketEventLog[]>([]);
+  const [eventLogsLoading, setEventLogsLoading] = useState(false);
+  const [sqlPreview, setSqlPreview] = useState<{ success: boolean; rows: any[]; columns: string[]; error?: string } | null>(null);
+  const [sqlPreviewLoading, setSqlPreviewLoading] = useState(false);
   const [sapModule, setSapModule] = useState("");
   const [sapModuleLoading, setSapModuleLoading] = useState(false);
-
-  // New State variables
-  const [sqlPreview, setSqlPreview] = useState<{ success: boolean, columns: string[], rows: any[], error: string | null } | null>(null);
-  const [sqlPreviewLoading, setSqlPreviewLoading] = useState(false);
-
-  /** Strip SQL comment lines and inline -- comments, returning only executable SQL */
-  function stripSqlComments(sql: string): string {
-    return sql
-      .split('\n')
-      .map(line => {
-        // Remove inline -- comments but keep the rest of the line
-        const inlineIdx = line.indexOf('--');
-        return inlineIdx >= 0 ? line.slice(0, inlineIdx) : line;
-      })
-      .join('\n')
-      .trim();
-  }
-
-  const [eventLogs, setEventLogs] = useState<any[]>([]);
-  const [eventLogsLoading, setEventLogsLoading] = useState(true);
-
-  async function fetchEventLogs(tId: string) {
-    setEventLogsLoading(true);
-    const logs = await getEventLogsForTicketAction(tId);
-    setEventLogs(logs);
-    setEventLogsLoading(false);
-  }
+  const [newComment, setNewComment] = useState("");
+  const [commentLoading, setCommentLoading] = useState(false);
 
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      const fetchedTicket = await getTicketById(id);
-      setTicket(fetchedTicket);
-      if (fetchedTicket) {
-        setStatus(fetchedTicket.status);
-        let existingMod = fetchedTicket.team && fetchedTicket.team.startsWith("SAP-")
-          ? fetchedTicket.team.replace("SAP-", "")
-          : "";
-        if (!existingMod) {
-          existingMod = detectSapModule(fetchedTicket.title, fetchedTicket.description);
-          if (existingMod) updateTicketSapModuleAction(id, existingMod);
-        }
-        setSapModule(existingMod);
-        fetchEventLogs(id);
-      }
-
-      const allAnalyses = await getAnalyses();
-      setAnalysis(allAnalyses.find((a) => a.ticketId === id) ?? null);
-      setLoading(false);
+    if (id) {
+      fetchTicketData();
+      fetchEventLogs(id as string);
     }
-    loadData();
   }, [id]);
 
-  async function handleSapModuleChange(newModule: string) {
-    setSapModule(newModule);
-    if (newModule && ticket) {
-      setSapModuleLoading(true);
-      await updateTicketSapModuleAction(ticket.id, newModule);
-      fetchEventLogs(ticket.id);
-      setSapModuleLoading(false);
+  async function fetchTicketData() {
+    setLoading(true);
+    try {
+      const ticketData = await getTicketById(id as string);
+      if (ticketData) {
+        setTicket(ticketData);
+        setSapModule(ticketData.sapModule || "");
+        if (ticketData.status === "validated" || ticketData.status === "approved" || ticketData.status === "analysis_pending" || ticketData.status === "sql_proposed") {
+          const analysisRes = await getTicketAnalysisAction(id as string);
+          if (analysisRes.success && analysisRes.analysis) {
+            setAnalysis(analysisRes.analysis);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchEventLogs(ticketId: string) {
+    setEventLogsLoading(true);
+    try {
+      const res = await getEventLogsForTicketAction(ticketId);
+      if (res) {
+        setEventLogs(res);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEventLogsLoading(false);
     }
   }
 
   async function handleRunSqlPreview() {
-    if (!analysis?.sqlProposal) {
-      setSqlPreview({ success: false, columns: [], rows: [], error: "No SQL proposal found for this ticket." });
-      return;
-    }
-
-    // Strip all comment lines and inline -- comments
-    const executableSql = stripSqlComments(analysis.sqlProposal);
-
-    // Guard: don't bother calling server if SQL is empty or comment-only
-    if (!executableSql) {
-      setSqlPreview({ success: false, columns: [], rows: [], error: "No executable SQL — the AI analysis did not generate a runnable query for this ticket." });
-      return;
-    }
-
+    if (!analysis?.sqlProposal || !ticket?.id) return;
     setSqlPreviewLoading(true);
-    setSqlPreview(null);
     try {
-      const res = await executeSqlPreviewAction(ticket!.id, executableSql);
+      const res = await executeSqlPreviewAction(ticket.id, analysis.sqlProposal);
       setSqlPreview(res);
-      fetchEventLogs(ticket!.id);
-    } catch (err: any) {
-      setSqlPreview({ success: false, columns: [], rows: [], error: err?.message || "Execution request failed. Check your connection and try again." });
+    } catch (err) {
+      console.error(err);
+      setSqlPreview({ success: false, rows: [], columns: [], error: "Execution failed" });
     } finally {
       setSqlPreviewLoading(false);
     }
   }
 
-  if (loading) {
-    return <div className="p-6 text-slate-400 text-center"><p>Loading ticket...</p></div>;
+  async function handleAddComment() {
+    if (!newComment.trim() || !ticket?.id) return;
+    setCommentLoading(true);
+    try {
+      const res = await addTicketCommentAction(ticket.id, newComment.trim());
+      if (res.success) {
+        setNewComment("");
+        fetchTicketData();
+        fetchEventLogs(ticket.id);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCommentLoading(false);
+    }
   }
 
-  if (!ticket) {
+  async function handleReanalyze() {
+    if (!ticket?.id) return;
+    try {
+      const { analyzeTicketAction } = await import("@/app/actions");
+      await analyzeTicketAction(ticket.id, ticket.title, ticket.description || "");
+      fetchTicketData();
+      fetchEventLogs(ticket.id);
+    } catch (err) {
+      console.error("Re-analysis failed:", err);
+      alert("Re-analysis failed. Please check the logs.");
+    }
+  }
+
+  async function handleSapModuleChange(newModule: string) {
+    setSapModule(newModule);
+    setSapModuleLoading(true);
+    try {
+      await updateTicketSapModuleAction(id as string, newModule);
+      fetchEventLogs(id as string);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSapModuleLoading(false);
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="p-6 text-slate-400 text-center">
-        <p>Ticket not found.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div className="relative">
+          <div className="w-12 h-12 border-4 border-blue-600/20 rounded-full animate-spin border-t-blue-600" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Bot className="w-4 h-4 text-blue-600 animate-pulse" />
+          </div>
+        </div>
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Accessing Secure Records...</p>
       </div>
     );
   }
 
-  // Parse validation analysis snapshot from close_notes (set when ticket was validated)
-  const parsedValidation = ticket.closeNotes ? parseCloseNotes(ticket.closeNotes) : null;
-  const isValidated = ticket.status === "validated" || ticket.state?.toLowerCase() === "validated";
+  if (!ticket) {
+    return (
+      <div className="p-8 text-center bg-white rounded-3xl border border-slate-200">
+        <h2 className="text-xl font-black text-slate-900">Incident Not Found</h2>
+        <p className="text-slate-500 mt-2">The requested incident ID does not exist in the system.</p>
+        <Link href="/tickets">
+          <button className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold">Return to Dashboard</button>
+        </Link>
+      </div>
+    );
+  }
+
+  const isValidated = ticket.status === "validated" || ticket.status === "approved";
+  const parsedValidation = isValidated && ticket.closeNotes ? JSON.parse(ticket.closeNotes) : null;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Link href="/tickets" className="w-8 h-8 flex items-center justify-center bg-white border border-gray-100 rounded-lg text-slate-400 hover:text-slate-800 hover:border-gray-200 transition-all shadow-sm">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <h2 className="text-xl font-bold text-slate-800">{ticket.id}</h2>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${STATUS_COLORS[ticket.status as keyof typeof STATUS_COLORS]}`}>
-                {STATUS_LABELS[ticket.status as keyof typeof STATUS_LABELS]}
-              </span>
-              <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${PRIORITY_COLORS[ticket.priority as keyof typeof PRIORITY_COLORS]}`}>
-                {ticket.priority}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 font-medium">{ticket.sysClassName} — {ticket.team}</p>
-          </div>
+    <div className="max-w-[1400px] mx-auto space-y-4 animate-in fade-in duration-500 p-3 sm:p-4">
+      {/* ─── Premium Header ─── */}
+      <div className="bg-[#0A1628] rounded-2xl shadow-xl overflow-hidden border border-white/5 ring-1 ring-white/10 relative">
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
+          <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[120%] bg-indigo-500/20 blur-[120px] rounded-full" />
+          <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[150%] bg-violet-600/10 blur-[150px] rounded-full" />
         </div>
 
-        <div className="flex items-center gap-3">
-          {ticket.aiConfidence !== undefined && (
-            <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md border border-white/60 px-4 py-2 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                <Zap className="w-4 h-4 text-blue-600" />
+        <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+          <div className="space-y-2">
+            <button
+              onClick={() => router.back()}
+              className="flex items-center gap-1.5 text-[8px] font-black text-indigo-300 uppercase tracking-[0.2em] hover:text-white transition-all group px-2 py-0.5 bg-white/5 rounded-full border border-white/10 hover:bg-white/10"
+            >
+              <ArrowLeft className="w-2.5 h-2.5 group-hover:-translate-x-1 transition-transform" />
+              Back
+            </button>
+            
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center shrink-0 shadow-lg ring-1 ring-white/20">
+                <Hash className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">AI Confidence</p>
-                <p className="text-sm font-black text-slate-800">{ticket.aiConfidence}%</p>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-black text-white tracking-tight uppercase leading-none">{ticket.id}</h1>
+                  <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border backdrop-blur-md ${
+                    ticket.status === 'validated' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                    ticket.status === 'pending' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                    ticket.status === 'analysis_pending' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' :
+                    ticket.status === 'sql_proposed' ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
+                    ticket.status === 'rejected' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                    'bg-white/10 text-slate-300 border-white/20'
+                  }`}>
+                    {STATUS_LABELS[ticket.status as keyof typeof STATUS_LABELS] || ticket.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5 mt-1 text-[9px] font-black text-white/40 uppercase tracking-widest">
+                  <span className="flex items-center gap-1"><Layers className="w-2.5 h-2.5 text-indigo-400" />{ticket.team}</span>
+                  <span className="opacity-10 text-white">|</span>
+                  <span className="flex items-center gap-1"><User className="w-2.5 h-2.5 text-violet-400" />{ticket.openedBy || "Agent"}</span>
+                </div>
               </div>
             </div>
-          )}
+          </div>
 
+          <div className="flex items-center gap-3 shrink-0 bg-white/5 p-2 rounded-xl border border-white/10 backdrop-blur-xl">
+            <div className="flex flex-col items-end gap-0 px-2">
+              <span className="text-[7px] font-black text-white/30 uppercase tracking-[0.2em]">Priority</span>
+              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
+                ticket.priority?.includes('1') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                ticket.priority?.includes('2') ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+                ticket.priority?.includes('3') ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                'bg-white/5 text-slate-400 border-white/10'
+              }`}>{ticket.priority}</span>
+            </div>
+            <div className="w-px h-8 bg-white/10" />
+            <div className="flex items-center gap-2.5 px-2">
+              <div className="flex flex-col items-end">
+                <span className="text-[7px] font-black text-white/30 uppercase tracking-[0.2em]">FORS CONFIDENCE</span>
+                <span className="text-lg font-black text-white leading-none mt-0">{ticket.aiConfidence || 0}%</span>
+              </div>
+              <div className="relative w-10 h-10">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle className="text-white/5" strokeWidth="4" stroke="currentColor" fill="transparent" r="16" cx="20" cy="20" />
+                  <circle
+                    className="text-indigo-500 transition-all duration-1000"
+                    strokeWidth="4"
+                    strokeDasharray={2 * Math.PI * 16}
+                    strokeDashoffset={2 * Math.PI * 16 * (1 - (ticket.aiConfidence || 0) / 100)}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r="16" cx="20" cy="20"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_40px_rgb(0,0,0,0.04)] overflow-hidden relative group">
-            {/* Top gradient accent */}
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 opacity-90" />
-            
-            <div className="p-6 border-b border-white/40 flex items-center justify-between bg-white/30 backdrop-blur-sm mt-1.5">
-              <h3 className="font-black text-slate-800 flex items-center gap-3 tracking-tight text-lg">
-                <div className="w-2 h-6 bg-blue-500 rounded-full shadow-[0_0_12px_rgba(59,130,246,0.6)]" />
-                Ticket Information
-              </h3>
-              <div className="flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(ticket.createdAt).toLocaleString()}</span>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* ─── Primary Incident Intelligence ─── */}
+        <div className="lg:col-span-8 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden relative group">
+            <div className="absolute top-0 right-0 p-4 opacity-5">
+              <Activity className="w-20 h-20 text-indigo-900" />
             </div>
-            <div className="p-8">
-              <h4 className="text-2xl font-black text-slate-900 mb-6 tracking-tight leading-tight">{ticket.title}</h4>
-              <div className="bg-white/60 backdrop-blur-sm border border-slate-200/50 rounded-2xl p-6 mb-10 shadow-sm">
-                <p className="text-sm font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">{ticket.description}</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <div>
-                  <h5 className="text-[11px] font-black text-blue-500 uppercase tracking-widest mb-5 flex items-center gap-2">
-                    <div className="w-1.5 h-4 bg-blue-400/80 rounded-full" />
-                    Request Details
-                  </h5>
-                  <div className="space-y-5">
-                    <DetailItem label="Opened By" value={ticket.openedBy} />
-                    <DetailItem label="Opened At" value={ticket.openedAt} />
-                    <DetailItem label="Business Service" value={ticket.businessService} />
-                    <DetailItem label="sys_class_name" value={ticket.sysClassName} />
-                  </div>
+            
+            <div className="p-4 relative z-10">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center shadow-inner">
+                  <Activity className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
-                  <h5 className="text-[11px] font-black text-violet-500 uppercase tracking-widest mb-5 flex items-center gap-2">
-                    <div className="w-1.5 h-4 bg-violet-400/80 rounded-full" />
-                    Assignment
-                  </h5>
-                  <div className="space-y-5">
-                    <DetailItem label="Assignment Group" value={ticket.team} />
-                    <DetailItem label="Assigned To" value={ticket.assignedTo} />
-                    <DetailItem label="Updated By" value="System" />
-                    <DetailItem label="Target SLA" value="8h (Response)" />
-                  </div>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Incident Narrative</h3>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Data Payload</p>
                 </div>
               </div>
 
-              {/* SAP Module Dispatcher */}
-              <div className="mt-10 pt-8 border-t border-slate-200/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-6">
                 <div>
-                  <h5 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-1">
-                    System Routing
-                  </h5>
-                  <p className="text-xs font-medium text-slate-500">Assign specific SAP module context.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {sapModule && (
-                    <div className={`px-4 py-2 rounded-xl border text-xs font-black shadow-sm ${getSapModuleColor(sapModule)}`}>
-                      SAP {sapModule}
+                  <h4 className="text-lg font-black text-slate-900 mb-3 leading-tight tracking-tight">{ticket.title}</h4>
+                  <div className="relative">
+                    <div className="absolute top-0 left-0 w-0.5 h-full bg-gradient-to-b from-indigo-500 to-violet-500 rounded-full" />
+                    <div className="pl-4">
+                      <p className="text-[13px] font-bold text-slate-600 leading-relaxed italic">
+                        &quot;{ticket.description}&quot;
+                      </p>
                     </div>
-                  )}
-                  <select
-                    value={sapModule}
-                    onChange={(e) => handleSapModuleChange(e.target.value)}
-                    disabled={sapModuleLoading}
-                    className="p-2.5 bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-xl text-xs font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all shadow-sm cursor-pointer"
-                  >
-                    {SAP_MODULES.map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-100 shadow-inner">
+                  <div className="space-y-3">
+                    <h5 className="text-[8px] font-black text-indigo-600 uppercase tracking-[0.25em] flex items-center gap-1.5">
+                      <Shield className="w-3 h-3" /> Metadata
+                    </h5>
+                    <div className="grid gap-2">
+                      <DetailItem label="Originator" value={ticket.openedBy} icon={<User className="w-3 h-3 text-indigo-400" />} />
+                      <DetailItem label="Timestamp" value={ticket.openedAt} icon={<Clock className="w-3 h-3 text-indigo-400" />} />
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h5 className="text-[8px] font-black text-violet-600 uppercase tracking-[0.25em] flex items-center gap-1.5">
+                      <Zap className="w-3 h-3" /> Operations
+                    </h5>
+                    <div className="grid gap-2">
+                      <DetailItem label="Team" value={ticket.team} icon={<Layers className="w-3 h-3 text-violet-400" />} />
+                      <DetailItem label="Assignee" value={ticket.assignedTo} icon={<User className="w-3 h-3 text-violet-400" />} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div>
+                    <h5 className="text-[9px] font-black text-slate-900 uppercase tracking-widest leading-none">Functional Routing</h5>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1">SAP Environment</p>
+                  </div>
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    {sapModule && (
+                      <div className={clsx(
+                        "px-3 py-1.5 rounded-lg border text-[10px] font-black shadow-sm flex items-center gap-1.5",
+                        getSapModuleColor(sapModule)
+                      )}>
+                        <Bot className="w-3.5 h-3.5" />
+                        SAP {sapModule}
+                      </div>
+                    )}
+                    <select
+                      value={sapModule}
+                      onChange={(e) => handleSapModuleChange(e.target.value)}
+                      disabled={sapModuleLoading}
+                      className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm cursor-pointer"
+                    >
+                      {SAP_MODULES.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
-
             </div>
           </div>
 
-          {/* ─── Validation / AI Analysis Report (from close_notes) ─── */}
-          {isValidated && parsedValidation && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-4 border-t-emerald-500">
-              <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-emerald-50/10">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <div className="w-1.5 h-4 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                  AI Analysis Report
-                </h3>
-                <div className="flex items-center gap-2">
-                  {parsedValidation.confidence && (
-                    <span className="text-[10px] font-bold bg-emerald-100 px-2 py-0.5 rounded text-emerald-700 uppercase tracking-tighter">
-                      Confidence: {parsedValidation.confidence}
-                    </span>
-                  )}
-                  <span className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded uppercase tracking-tighter flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Validated
-                  </span>
+          {/* ─── Internal Comments & Collaboration ─── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden group">
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center shadow-inner">
+                    <MessageSquare className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Comments</h3>
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Ticket Discussion</p>
+                  </div>
                 </div>
               </div>
-              <div className="p-6 space-y-5">
 
-                {parsedValidation.rootCause && (
+              <div className="space-y-6">
+                {ticket.comments && (
+                  <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-5 shadow-inner relative group-hover:bg-white transition-colors">
+                    <p className="text-[12px] font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {ticket.comments.replace(/\\n/g, '\n').replace(/GHOST RESPONSE/g, 'FORS AGENT RESPONSE')}
+                    </p>
+                  </div>
+                )}
+
+                <div className="relative">
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Enter comments..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-[12px] font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 transition-all min-h-[80px] resize-none shadow-inner"
+                  />
+                  <div className="absolute bottom-3 right-3">
+                    <button
+                      onClick={handleAddComment}
+                      disabled={commentLoading || !newComment.trim()}
+                      className="px-4 py-2 bg-[#0A1628] text-white rounded-lg text-[9px] font-black uppercase tracking-[0.2em] flex items-center gap-2 hover:bg-indigo-600 transition-all shadow-xl shadow-slate-900/20 disabled:opacity-50 active:scale-95 ring-1 ring-white/10"
+                    >
+                      {commentLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                      Transmit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Post-Resolution Report (Validated Only) ─── */}
+          {isValidated && parsedValidation && (
+            <div className="bg-white rounded-2xl border border-emerald-200 shadow-2xl overflow-hidden group">
+              <div className="bg-emerald-600 px-6 py-4 flex items-center justify-between relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-full bg-white/10 -skew-x-12 translate-x-10" />
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md shadow-lg ring-1 ring-white/30">
+                    <CheckCircle className="w-6 h-6 text-white" />
+                  </div>
                   <div>
-                    <p className="text-[11px] font-black text-blue-600 uppercase mb-2 tracking-widest">Root Cause</p>
-                    <div className="bg-blue-50/30 border border-blue-100/50 rounded-2xl p-4 text-sm text-slate-700 leading-relaxed">
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight">Resolution Report</h3>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {parsedValidation.rootCause && (
+                  <div className="space-y-3">
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Root Cause</h4>
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 font-bold text-slate-700 leading-relaxed text-sm shadow-inner">
                       {parsedValidation.rootCause}
                     </div>
                   </div>
                 )}
-                {parsedValidation.resolutionSteps && (
-                  <div>
-                    <p className="text-[11px] font-black text-violet-600 uppercase mb-2 tracking-widest">Resolution Steps</p>
-                    <div className="bg-violet-50/30 border border-violet-100/50 rounded-2xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {parsedValidation.resolutionSteps}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Query Simulation Environment ─── */}
+          {analysis?.sqlProposal && (
+            <div className="space-y-4">
+              <SQLProposal sql={analysis.sqlProposal} />
+
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xl group/lab">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 backdrop-blur-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#0A1628] rounded-xl flex items-center justify-center shadow-lg ring-1 ring-white/10">
+                      <Terminal className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <span className="text-lg font-black text-slate-900 tracking-tight uppercase leading-none">Simulation Lab</span>
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">S4/HANA Sandbox Environment</p>
                     </div>
                   </div>
-                )}
-                {parsedValidation.suggestedSql && (
-                  <div>
-                    <p className="text-[11px] font-black text-slate-500 uppercase mb-2 tracking-widest">Suggested SQL</p>
-                    <div className="bg-slate-800 rounded-2xl p-4 font-mono text-xs text-blue-300 overflow-x-auto">
-                      <pre>{parsedValidation.suggestedSql}</pre>
+                  <button
+                    onClick={handleRunSqlPreview}
+                    disabled={sqlPreviewLoading}
+                    className="group bg-[#0A1628] hover:bg-indigo-600 text-white text-[9px] px-5 py-2.5 rounded-xl font-black uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2 ring-1 ring-white/10"
+                  >
+                    <RefreshCw className={clsx("w-3 h-3", sqlPreviewLoading && "animate-spin")} />
+                    {sqlPreviewLoading ? "Simulating..." : "Initiate Execution"}
+                  </button>
+                </div>
+
+                {sqlPreview ? (
+                  <div className="p-5">
+                    {sqlPreview.success ? (
+                      sqlPreview.rows.length > 0 ? (
+                        <div className="overflow-x-auto border border-slate-100 rounded-xl shadow-inner">
+                          <table className="w-full text-left text-[11px] bg-white">
+                            <thead className="bg-slate-900 text-white border-b border-slate-800">
+                              <tr>
+                                {sqlPreview.columns.map(col => (
+                                  <th key={col} className="px-3 py-3 font-black uppercase tracking-[0.2em] text-[9px]">{col}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {sqlPreview.rows.map((row, idx) => (
+                                <tr key={idx} className="hover:bg-blue-50/50 transition-colors">
+                                  {sqlPreview.columns.map(col => (
+                                    <td key={col} className="px-3 py-3 text-slate-600 font-mono font-medium">
+                                      {row[col]?.toString() ?? 'NULL'}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center rounded-xl bg-slate-50 border border-slate-100 border-dashed">
+                          <Activity className="w-7 h-7 text-slate-300 mx-auto mb-3" />
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No record modifications detected.</p>
+                        </div>
+                      )
+                    ) : (
+                      <div className="p-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl text-[11px] font-bold flex items-center gap-2.5">
+                        <Activity className="w-4 h-4" />
+                        {sqlPreview.error}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center flex flex-col items-center gap-3 group/ready">
+                    <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center group-hover/ready:scale-110 transition-transform duration-500 shadow-inner">
+                      <Database className="w-6 h-6 text-slate-200" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">System Ready</p>
+                      <p className="text-[9px] font-bold text-slate-300">Awaiting simulation trigger on target schema.</p>
                     </div>
                   </div>
                 )}
               </div>
             </div>
           )}
-
-          {/* ─── Resolution Summary (close_notes for non-validated closed tickets) ─── */}
-          {(ticket.status === 'closed' || (ticket.closeNotes && !isValidated)) && !parsedValidation && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-4 border-t-emerald-500">
-              <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-emerald-50/10">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <div className="w-1.5 h-4 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                  Resolution Summary
-                </h3>
-              </div>
-              <div className="p-6 space-y-6">
-                <div>
-                  <p className="text-[11px] font-black text-emerald-600 uppercase mb-3 px-1 tracking-widest">Internal Close Notes</p>
-                  <div className="bg-emerald-500/5 border border-emerald-100/50 rounded-2xl p-5 text-sm text-slate-700 leading-relaxed italic shadow-inner">
-                    {ticket.closeNotes || "No detailed close notes provided."}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-10">
-                  <DetailItem label="Closed By" value={ticket.closedBy} />
-                  <DetailItem label="Closed At" value={ticket.closedAt} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-4 border-t-amber-500">
-            <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-amber-50/10">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <div className="w-1.5 h-4 bg-amber-500 rounded-full" />
-                Comments &amp; Interaction
-              </h3>
-              <span className="text-[10px] font-bold bg-amber-100 px-2 py-0.5 rounded text-amber-700 uppercase tracking-tighter">HISTORY</span>
-            </div>
-            <div className="p-6">
-              <div className="bg-amber-50/20 border border-amber-100/30 rounded-2xl p-6 shadow-inner">
-                <p className="text-sm text-slate-500 leading-relaxed italic">{ticket.comments || "No comments yet for this ticket."}</p>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="space-y-6">
-          {analysis && ticket.aiConfidence !== undefined ? (
-            <div className="space-y-6">
-              <TicketAnalysis analysis={analysis} />
+        {/* ─── Command Sidebar (AI & Auditing) ─── */}
+        <div className="lg:col-span-4 space-y-4">
+          {analysis && <TicketAnalysis analysis={analysis} />}
 
-              {analysis.sqlProposal && (
-                <div className="space-y-6">
-                  <SQLProposal sql={analysis.sqlProposal} />
-
-                  {/* SQL Execution Results Panel */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">SQL Execution Results</span>
-                      <button
-                        onClick={handleRunSqlPreview}
-                        disabled={sqlPreviewLoading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-4 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {sqlPreviewLoading ? "Running..." : "Run Preview"}
-                      </button>
-                    </div>
-
-                    {sqlPreview && (
-                      <div className="p-4">
-                        {sqlPreview.success ? (
-                          sqlPreview.rows.length > 0 ? (
-                            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                              <table className="w-full text-left text-xs bg-white">
-                                <thead className="bg-slate-100">
-                                  <tr>
-                                    {sqlPreview.columns.map(col => (
-                                      <th key={col} className="p-2 border-b border-r last:border-r-0 font-bold text-slate-600">{col}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {sqlPreview.rows.map((row, idx) => (
-                                    <tr key={idx} className="border-b last:border-b-0 hover:bg-slate-50">
-                                      {sqlPreview.columns.map(col => (
-                                        <td key={col} className="p-2 border-r border-slate-50 last:border-r-0 text-slate-700 font-mono">
-                                          {row[col]?.toString() ?? 'NULL'}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="text-center text-xs text-slate-500 font-bold py-4">0 rows returned.</div>
-                          )
-                        ) : (
-                          <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-bold">
-                            {sqlPreview.error}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {!sqlPreview && (
-                      <div className="p-6 text-center text-xs text-slate-400 font-bold">
-                        Click "Run Preview" to execute safely.
-                      </div>
-                    )}
-                  </div>
+          {/* ─── Audit Stream Section ─── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden group hover:border-indigo-400 transition-all duration-500">
+            <div className="px-4 py-3 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#0A1628] rounded-xl flex items-center justify-center shadow-lg">
+                  <Activity className="w-5 h-5 text-white" />
                 </div>
-              )}
-
-              <ApproveRejectBar
-                ticketId={ticket.id}
-                status={status}
-                onApprove={() => setStatus("approved")}
-                onReject={() => setStatus("rejected")}
-                onReanalyze={() => {
-                  router.push(`/lab?id=${ticket.id}&auto=true`);
-                }}
-              />
-            </div>
-          ) : (
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl">
-              <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center mb-4">
-                <Zap className="w-5 h-5 text-blue-400" />
+                <div>
+                  <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.15em]">Audit Stream</h4>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mt-1">Logs</p>
+                </div>
               </div>
-              {isValidated ? (
-                <>
-                  <h4 className="font-bold text-lg mb-2 flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
-                    Ticket Validated
-                  </h4>
-                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
-                    This ticket has been validated and the analysis has been stored. View the AI Analysis Report on the left.
-                  </p>
-                  <Link
-                    href={`/lab?id=${ticket.id}`}
-                    className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-lg"
-                  >
-                    <Bot className="w-4 h-4" />
-                    Open in Analysis Lab
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <h4 className="font-bold text-lg mb-2">No AI Analysis yet</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
-                    This ticket has not been processed by the AI assistant. AI insights and automated SQL proposals are generated upon request.
-                  </p>
-                  <button
-                    onClick={async () => {
-                      setLoadingAnalysis(true);
-                      try {
-                        const newAnalysis = await analyzeTicketAction(ticket.id, ticket.title, ticket.description);
-                        setAnalysis({
-                          ticketId: ticket.id,
-                          rootCause: newAnalysis.rootCause,
-                          impactedTables: newAnalysis.impactedTables || [],
-                          recommendation: newAnalysis.recommendation,
-                          sqlProposal: newAnalysis.sqlProposal,
-                          gostSummary: newAnalysis.gostSummary,
-                          urgency: newAnalysis.urgency
-                        });
-                        setTicket(prev => prev ? { ...prev, aiConfidence: newAnalysis.confidence } : null);
-                      } catch (err) {
-                        console.error("Analysis failed:", err);
-                        alert("Analysis request failed.");
-                      } finally {
-                        setLoadingAnalysis(false);
-                      }
-                    }}
-                    disabled={loadingAnalysis}
-                    className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loadingAnalysis ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        Generating...
-                      </>
-                    ) : "Trigger Analysis Request"}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">System Event Log</h4>
-              <button onClick={() => fetchEventLogs(ticket.id)} className="text-slate-400 hover:text-slate-600">
-                <RefreshCw className={`w-3 h-3 ${eventLogsLoading ? 'animate-spin' : ''}`} />
+              <button 
+                onClick={() => fetchEventLogs(ticket.id)} 
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-all shadow-sm"
+              >
+                <RefreshCw className={clsx("w-3.5 h-3.5", eventLogsLoading && 'animate-spin')} />
               </button>
             </div>
-            <div className="max-h-[300px] overflow-y-auto space-y-4 pr-1">
+            
+            <div className="p-4 space-y-3 max-h-[320px] overflow-y-auto custom-scrollbar">
               {eventLogs.length > 0 ? eventLogs.map((log, idx) => (
-                <div key={idx} className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 bg-blue-500" />
-                    {idx < eventLogs.length - 1 && <div className="w-px flex-1 bg-slate-100 mt-1 min-h-[16px]" />}
+                <div key={idx} className="flex gap-3 group/log">
+                  <div className="flex flex-col items-center pt-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md transition-transform" />
+                    {idx < eventLogs.length - 1 && <div className="w-0.5 flex-1 bg-slate-100 mt-2 min-h-[30px] group-hover/log:bg-indigo-100 transition-colors" />}
                   </div>
-                  <div className="pb-2">
-                    <p className="text-xs text-slate-800 font-medium">{log.message}</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      <p className="text-[10px] text-slate-400 font-mono">
-                        {new Date(log.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  <div className="pb-3 flex-1 border-b border-slate-50 last:border-0">
+                    <p className="text-[11px] font-black text-slate-700 leading-snug group-hover/log:text-indigo-900 transition-colors">
+                      {log.message.replace(/GHOST/g, 'FORS Agent')}
+                    </p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
-                      <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded uppercase">{log.attribution}</span>
+                      <span className="text-[8px] bg-indigo-50 text-indigo-500 px-2 py-1 rounded-lg font-black uppercase tracking-[0.2em] border border-indigo-100">{log.attribution}</span>
                     </div>
                   </div>
                 </div>
               )) : (
-                <p className="text-xs text-slate-400 italic">No events found.</p>
+                <div className="py-8 text-center">
+                  <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 border border-slate-100">
+                    <Activity className="w-4 h-4 text-slate-300" />
+                  </div>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">No Events</p>
+                </div>
               )}
             </div>
           </div>
+
+          <ApproveRejectBar
+            ticketId={ticket.id}
+            status={ticket.status}
+            onApprove={fetchTicketData}
+            onReject={fetchTicketData}
+            onReanalyze={handleReanalyze}
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function DetailItem({ label, value }: { label: string; value?: string | null }) {
+function DetailItem({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
-    <div className="group">
-      <p className="text-[10px] font-bold text-slate-300 uppercase tracking-tight group-hover:text-slate-400 transition-colors">{label}</p>
-      <p className="text-xs font-semibold text-slate-700 mt-0.5">{value || "—"}</p>
+    <div className="flex flex-col gap-1 group/item">
+      <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+        {icon}
+        {label}
+      </label>
+      <p className="text-[11px] font-black text-slate-800 group-hover:text-indigo-600 transition-colors">
+        {value || "Not Specified"}
+      </p>
     </div>
   );
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
-import { chatWithGostAction } from "@/app/actions";
+import { chatWithAgentAction } from "@/app/actions";
 
 interface ChatWindowProps {
   ticketId: string;
@@ -39,8 +39,7 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
 
     try {
       const gHistory = messages.map(m => ({ role: m.role === 'AI' ? 'assistant' : 'user', content: m.content }));
-
-      const replyContent = await chatWithGostAction(ticketId, input, gHistory);
+      const replyContent = await chatWithAgentAction(ticketId, input, gHistory);
 
       const gostReply: ChatMessage = {
         id: String(Date.now() + 1),
@@ -48,13 +47,12 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
         role: "AI",
         content: replyContent,
         createdAt: new Date().toISOString(),
-        senderName: "FORS AGENT",
+        senderName: "FORS Agent",
       };
 
       setMessages((prev) => [...prev, gostReply]);
     } catch (err) {
       console.error(err);
-
       const errorMsg: ChatMessage = {
         id: String(Date.now() + 1),
         conversationId: ticketId + "_conv",
@@ -70,73 +68,99 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
   }
 
   return (
-    <div className="flex flex-col h-full bg-white/80 backdrop-blur-xl rounded-3xl border border-white/60 shadow-[0_8px_40px_rgb(0,0,0,0.06)] overflow-hidden relative">
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/30 via-white/50 to-blue-50/30 pointer-events-none" />
-      
-      <div className="relative px-6 py-4 border-b border-white/60 flex items-center gap-3 bg-white/40">
-        <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-        <span className="text-sm font-black text-slate-800 tracking-tight uppercase">Ticket #{ticketId}</span>
+    <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+      {/* Chat Header */}
+      <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-3 bg-white">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+          <Bot className="w-4 h-4 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-black text-slate-800 tracking-tight">FORS Agent</p>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Active · Ticket #{ticketId}</span>
+          </div>
+        </div>
       </div>
 
-      <div className="relative flex-1 p-6 space-y-6 overflow-y-auto scroll-smooth">
+      {/* Messages */}
+      <div className="flex-1 p-5 space-y-5 overflow-y-auto bg-slate-50/50">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
+              <Sparkles className="w-7 h-7 text-indigo-400" />
+            </div>
+            <p className="text-sm font-bold text-slate-500">Start a conversation with FORS Agent</p>
+            <p className="text-xs text-slate-400 max-w-xs">Ask about the incident, request analysis, or discuss resolution steps.</p>
+          </div>
+        )}
+
         {messages.map((msg, idx) => (
           <div
             key={msg.id}
-            className={`flex gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500 ${msg.role === "User" ? "flex-row-reverse" : "flex-row"}`}
-            style={{ animationDelay: `${(idx % 10) * 50}ms` }}
+            className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 ${msg.role === "User" ? "flex-row-reverse" : "flex-row"}`}
+            style={{ animationDelay: `${(idx % 6) * 30}ms` }}
           >
-            <div className={`w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center shadow-lg transition-transform hover:scale-110 duration-300 ${msg.role === "AI" ? "bg-gradient-to-br from-indigo-500 to-blue-600 shadow-blue-200" : "bg-gradient-to-br from-teal-500 to-emerald-600 shadow-emerald-200"
-              }`}>
-              {msg.role === "AI" ? (
-                <Bot className="w-4.5 h-4.5 text-white" />
-              ) : (
-                <User className="w-4.5 h-4.5 text-white" />
-              )}
+            {/* Avatar */}
+            <div className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center shadow-sm ${
+              msg.role === "AI"
+                ? "bg-gradient-to-br from-indigo-500 to-violet-600"
+                : "bg-gradient-to-br from-slate-600 to-slate-700"
+            }`}>
+              {msg.role === "AI"
+                ? <Bot className="w-4 h-4 text-white" />
+                : <User className="w-4 h-4 text-white" />
+              }
             </div>
-            <div className={`flex flex-col gap-1.5 max-w-[75%] ${msg.role === "User" ? "items-end" : "items-start"}`}>
+
+            {/* Bubble */}
+            <div className={`flex flex-col gap-1 max-w-[75%] ${msg.role === "User" ? "items-end" : "items-start"}`}>
               <div className="flex items-center gap-2 px-1">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{msg.senderName}</span>
-                <span className="text-[9px] font-bold text-slate-300">{formatTime(msg.createdAt)}</span>
+                <span className="text-[9px] text-slate-300 font-medium">{formatTime(msg.createdAt)}</span>
               </div>
-              <div className={`px-5 py-3.5 rounded-2xl text-[13px] leading-relaxed shadow-sm backdrop-blur-md ${msg.role === "AI"
-                ? "bg-white/90 border border-slate-100 text-slate-700 rounded-tl-sm hover:shadow-md transition-shadow"
-                : "bg-indigo-600 border border-indigo-500 text-white rounded-tr-sm shadow-indigo-200/50 hover:shadow-indigo-300/50 hover:bg-indigo-500 transition-all"
-                }`}>
+              <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed font-medium ${
+                msg.role === "AI"
+                  ? "bg-white border border-slate-200 text-slate-700 rounded-tl-sm shadow-sm"
+                  : "bg-indigo-600 text-white rounded-tr-sm shadow-md shadow-indigo-200/60"
+              }`}>
                 {msg.content}
               </div>
             </div>
           </div>
         ))}
+
+        {/* Typing indicator */}
         {isTyping && (
-          <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center shadow-lg bg-gradient-to-br from-indigo-500 to-blue-600 shadow-blue-200">
-              <Bot className="w-4.5 h-4.5 text-white animate-pulse" />
+          <div className="flex gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm shrink-0">
+              <Bot className="w-4 h-4 text-white animate-pulse" />
             </div>
-            <div className="flex flex-col gap-1.5 items-start">
-              <div className="px-5 py-4 rounded-2xl rounded-tl-sm bg-white/90 border border-slate-100 shadow-sm flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" />
-              </div>
+            <div className="px-4 py-3 bg-white border border-slate-200 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-indigo-300 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
             </div>
           </div>
         )}
       </div>
 
-      <div className="relative px-6 py-4 border-t border-white/60 bg-white/40 flex items-center gap-3">
+      {/* Input Bar */}
+      <div className="px-4 py-3.5 border-t border-slate-100 bg-white flex items-center gap-3">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Message FORS AGENT..."
-          className="flex-1 bg-white/80 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm"
+          placeholder="Message FORS Agent…"
+          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
         />
         <button
           onClick={send}
           disabled={!input.trim() || isTyping}
-          className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white hover:bg-indigo-700 hover:scale-105 active:scale-95 transition-all shrink-0 shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:hover:scale-100"
+          className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white hover:bg-indigo-700 active:scale-95 transition-all shrink-0 shadow-md shadow-indigo-200 disabled:opacity-50 disabled:hover:bg-indigo-600"
         >
-          {isTyping ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 ml-0.5" />}
+          {isTyping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
       </div>
     </div>

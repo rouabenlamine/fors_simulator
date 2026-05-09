@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Settings, Save, Plus, Check, X, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import clsx from "clsx";
+import { Settings, Save, Plus, Check, X, ToggleLeft, ToggleRight, Loader2, ChevronDown, Activity, Clock, BarChart3, ShieldCheck, BookOpen, Sparkles, AlertTriangle, Pencil } from "lucide-react";
 import { getKpiConfigs, updateKpiConfigAction, createKpiConfigAction } from "@/app/actions/admin-actions";
 
 export default function KpiConfigPage() {
@@ -12,6 +14,10 @@ export default function KpiConfigPage() {
   const [createForm, setCreateForm] = useState({ name: "", category: "sla", description: "", sql_query: "" });
   const [creating, setCreating] = useState(false);
   const [edits, setEdits] = useState<Record<string, any>>({});
+  const [selectedKpi, setSelectedKpi] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,132 +52,321 @@ export default function KpiConfigPage() {
     setCreating(false);
   }
 
-  const categoryColor = (cat: string) => {
-    const map: Record<string, string> = {
-      sla: "text-rose-600 bg-rose-50 border-rose-200",
-      quality: "text-violet-600 bg-violet-50 border-violet-200",
-      performance: "text-emerald-600 bg-emerald-50 border-emerald-200",
-      volume: "text-amber-600 bg-amber-50 border-amber-200",
-      knowledge: "text-blue-600 bg-blue-50 border-blue-200",
-    };
-    return map[cat] || "text-gray-600 bg-gray-50 border-gray-200";
+  const CATEGORY_MAP: Record<string, { icon: any, label: string, color: string }> = {
+    sla: { icon: Clock, label: "SLA", color: "text-blue-600 bg-blue-50 border-blue-100" },
+    performance: { icon: Activity, label: "Performance", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
+    volume: { icon: BarChart3, label: "Volume", color: "text-amber-600 bg-amber-50 border-amber-100" },
+    quality: { icon: ShieldCheck, label: "Quality", color: "text-rose-600 bg-rose-50 border-rose-100" },
+    knowledge: { icon: BookOpen, label: "Knowledge", color: "text-violet-600 bg-violet-50 border-violet-100" }
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5 py-4 px-2">
-      <div className="flex items-center justify-between">
+    <div className="w-full space-y-6 py-6 px-8 animate-in fade-in duration-700">
+
+      {/* Minimalist Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
-            <Settings className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-100 shrink-0">
+            <Settings className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">KPI Configuration</h1>
-            <p className="text-sm text-slate-500">Define SLA targets, toggle visibility, and manage KPI metrics.</p>
+            <h1 className="text-sm font-black text-slate-800 tracking-tight">
+              KPI <span className="text-indigo-500">Configuration</span>
+            </h1>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Platform Governance</p>
           </div>
         </div>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl shadow-sm shadow-blue-200 transition-all font-semibold hover:shadow-md active:scale-[0.98]">
-          <Plus className="w-4 h-4" />
-          Add KPI
+
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg hover:bg-slate-800 transition-all active:scale-95 group"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add Metric
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-blue-500 animate-spin" /></div>
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Synchronizing KPIs</p>
+        </div>
       ) : kpis.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 border border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
-          <Settings className="w-10 h-10 text-gray-300" />
-          <p className="text-slate-400 text-sm">No KPIs configured. Click &quot;Add KPI&quot; to create one.</p>
+        <div className="flex flex-col items-center justify-center py-24 gap-4 bg-white/50 backdrop-blur-md rounded-[3rem] border-2 border-dashed border-slate-200">
+          <div className="w-16 h-16 bg-slate-100 rounded-3xl flex items-center justify-center mb-2">
+            <Settings className="w-8 h-8 text-slate-300" />
+          </div>
+          <p className="text-slate-500 text-[11px] font-black uppercase tracking-widest">No KPIs detected</p>
+          <button onClick={() => setShowCreate(true)} className="text-indigo-600 text-[10px] font-black uppercase tracking-widest hover:underline mt-2">Create First KPI</button>
         </div>
       ) : (
-        <div className="space-y-4">
-          {kpis.map(kpi => {
-            const localEdits = edits[kpi.id] || {};
-            const hasChanges = Object.keys(localEdits).length > 0;
-            return (
-              <div key={kpi.id} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => toggleKpi(kpi)} className="transition-colors" title={kpi.isEnabled ? "Disable" : "Enable"}>
-                      {kpi.isEnabled ? <ToggleRight className="w-7 h-7 text-emerald-500" /> : <ToggleLeft className="w-7 h-7 text-gray-300" />}
-                    </button>
-                    <div>
-                      <h3 className={`font-bold ${kpi.isEnabled ? "text-slate-800" : "text-slate-400 line-through"}`}>{kpi.name}</h3>
-                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {kpi.kpiId || kpi.id}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md border ${categoryColor(kpi.category)}`}>{kpi.category || "general"}</span>
-                    {hasChanges && (
-                      <button onClick={() => saveKpi(kpi)} disabled={savingId === kpi.id} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 text-xs font-semibold rounded-lg transition-all shadow-sm">
-                        <Save className="w-3 h-3" />
-                        {savingId === kpi.id ? "Saving..." : "Save"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Name</label>
-                    <input defaultValue={kpi.name} onChange={e => setEdit(kpi.id, "name", e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Category</label>
-                    <select defaultValue={kpi.category} onChange={e => setEdit(kpi.id, "category", e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400 cursor-pointer transition-all">
-                      {["sla", "performance", "volume", "quality", "knowledge"].map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Description</label>
-                    <input defaultValue={kpi.description || ""} onChange={e => setEdit(kpi.id, "description", e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all" />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">SQL Query</label>
-                  <textarea defaultValue={kpi.sql_query || ""} onChange={e => setEdit(kpi.id, "sql_query", e.target.value)} rows={2} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-indigo-600 font-mono focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none transition-all" placeholder="SELECT COUNT(*) FROM tickets WHERE ..." />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+        <div className="bg-white/40 backdrop-blur-3xl rounded-[2.5rem] border border-white/60 shadow-[0_20px_50px_rgba(79,70,229,0.05)] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-indigo-50/30 border-b border-indigo-100/50">
+                  <th className="px-8 py-5 text-left text-[9px] font-black text-indigo-900/60 uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-5 text-left text-[9px] font-black text-indigo-900/60 uppercase tracking-widest">Metric Identity</th>
+                  <th className="px-6 py-5 text-left text-[9px] font-black text-indigo-900/60 uppercase tracking-widest">Classification</th>
+                  <th className="px-6 py-5 text-left text-[9px] font-black text-indigo-900/60 uppercase tracking-widest"> SQL Query</th>
+                  <th className="px-8 py-5 text-right text-[9px] font-black text-indigo-900/60 uppercase tracking-widest">Operations</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-indigo-50/20">
+                {kpis.map((kpi, idx) => {
+                  const info = CATEGORY_MAP[kpi.category] || { icon: Settings, label: kpi.category, color: "text-slate-600 bg-slate-50 border-slate-100" };
+                  const Icon = info.icon;
 
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h3 className="text-lg font-bold text-slate-800">Add KPI Metric</h3>
-              <button onClick={() => setShowCreate(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Name *</label>
-                <input value={createForm.name} onChange={e => setCreateForm({ ...createForm, name: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" placeholder="SLA Breach Count" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Category</label>
-                <select value={createForm.category} onChange={e => setCreateForm({ ...createForm, category: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-400 cursor-pointer">
-                  {["sla", "performance", "volume", "quality", "knowledge"].map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Description</label>
-                <input value={createForm.description} onChange={e => setCreateForm({ ...createForm, description: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1.5">SQL Query</label>
-                <textarea value={createForm.sql_query} onChange={e => setCreateForm({ ...createForm, sql_query: e.target.value })} rows={3} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-indigo-600 font-mono focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none" placeholder="SELECT COUNT(*) FROM ..." />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
-              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">Cancel</button>
-              <button onClick={handleCreate} disabled={creating} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-sm">
-                <Check className="w-4 h-4" />
-                {creating ? "Creating..." : "Create KPI"}
-              </button>
-            </div>
+                  return (
+                    <tr
+                      key={kpi.id}
+                      className={clsx(
+                        "group transition-all duration-300 cursor-pointer relative",
+                        idx % 2 === 0 ? "bg-transparent" : "bg-indigo-50/10",
+                        "hover:bg-indigo-500/[0.03] hover:shadow-[inset_0_0_20px_rgba(79,70,229,0.02)]"
+                      )}
+                      onClick={() => setSelectedKpi(kpi)}
+                    >
+                      <td className="px-8 py-5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => toggleKpi(kpi)}
+                          disabled={savingId === kpi.id}
+                          className={clsx(
+                            "relative w-9 h-5 rounded-full transition-all duration-500 flex items-center px-0.5",
+                            kpi.isEnabled ? "bg-indigo-500 shadow-lg shadow-indigo-200" : "bg-slate-200"
+                          )}
+                        >
+                          <div className={clsx("w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 transform", kpi.isEnabled ? "translate-x-4" : "translate-x-0")} />
+                        </button>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex flex-col">
+                          <span className={clsx(
+                            "text-[11px] font-black tracking-tight transition-colors duration-300",
+                            kpi.isEnabled ? "text-slate-800 group-hover:text-indigo-600" : "text-slate-400 line-through"
+                          )}>{kpi.name}</span>
+                          <span className="text-[8px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">UID: {kpi.kpiId || kpi.id}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className={clsx("inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest shadow-sm transition-all duration-300 group-hover:scale-105", info.color)}>
+                          <Icon className="w-3 h-3" />
+                          {info.label}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="max-w-[200px] truncate font-mono text-[9px] text-slate-400 bg-white/50 px-3 py-2 rounded-lg border border-indigo-100/30 group-hover:border-indigo-200/50 transition-colors">
+                          {kpi.sql_query || "No KPI defined"}
+                        </div>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex items-center justify-end">
+                          <div className="w-8 h-8 bg-indigo-50 text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white rounded-xl flex items-center justify-center transition-all duration-300">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
+
+      {/* Edit Metric Drawer/Modal */}
+      {selectedKpi && mounted && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300" style={{ clipPath: 'inset(0 0 0 16rem)' }}>
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => { setSelectedKpi(null); setEdits({}); }} />
+          <div className="relative w-full max-w-lg bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/60 animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/50">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 text-white">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Edit KPI</h3>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{selectedKpi.name}</p>
+                </div>
+              </div>
+              <button onClick={() => { setSelectedKpi(null); setEdits({}); }} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-all active:scale-90 text-slate-300 hover:text-slate-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Metric Name</label>
+                  <input
+                    value={edits[selectedKpi.id]?.name ?? selectedKpi.name}
+                    onChange={(e) => setEdit(selectedKpi.id, "name", e.target.value)}
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-4 py-3 text-[11px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Classification</label>
+                  <select
+                    value={edits[selectedKpi.id]?.category ?? selectedKpi.category}
+                    onChange={(e) => setEdit(selectedKpi.id, "category", e.target.value)}
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-4 py-3 text-[11px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 cursor-pointer appearance-none outline-none transition-all"
+                  >
+                    {["sla", "performance", "volume", "quality", "knowledge"].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Governance Meta</label>
+                <textarea
+                  value={edits[selectedKpi.id]?.description ?? selectedKpi.description ?? ""}
+                  onChange={(e) => setEdit(selectedKpi.id, "description", e.target.value)}
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-4 py-3 text-[11px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none h-20 resize-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">SQL</label>
+                  <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Active Connection</span>
+                </div>
+                <textarea
+                  value={edits[selectedKpi.id]?.sql_query ?? selectedKpi.sql_query ?? ""}
+                  onChange={(e) => setEdit(selectedKpi.id, "sql_query", e.target.value)}
+                  className="w-full bg-slate-900 text-indigo-300 font-mono text-[11px] p-5 rounded-2xl border border-slate-800 focus:border-indigo-500/50 outline-none h-40 resize-none transition-all leading-relaxed"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 flex items-center justify-end gap-4 bg-slate-50/50 border-t border-slate-100">
+              <button
+                onClick={() => { setSelectedKpi(null); setEdits({}); }}
+                className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Discard
+              </button>
+              <button
+                onClick={() => { saveKpi(selectedKpi); setSelectedKpi(null); }}
+                disabled={savingId === selectedKpi.id || !edits[selectedKpi.id]}
+                className="bg-indigo-600 text-white px-8 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingId === selectedKpi.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Commit KPI
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.getElementById("modal-portal")!
+      )}
+
+      {/* Create Metric Modal */}
+      {showCreate && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300"
+          style={{ clipPath: 'inset(0 0 0 16rem)' }}
+        >
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowCreate(false)} />
+
+          <div className="relative w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden border border-white/40 animate-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white/50">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 text-white">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight leading-none">New Metric</h3>
+                  <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Platform Engineering</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCreate(false)} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center transition-all active:scale-90 group">
+                <X className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Metric Name *</label>
+                  <input
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    placeholder="e.g., Response SLA Breach"
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Classification</label>
+                  <div className="relative">
+                    <select
+                      value={createForm.category}
+                      onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
+                      className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white cursor-pointer transition-all appearance-none outline-none"
+                    >
+                      {["sla", "performance", "volume", "quality", "knowledge"].map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Brief Description</label>
+                <textarea
+                  value={createForm.description}
+                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  placeholder="Describe the metric purpose and scope..."
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all outline-none h-20 resize-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between ml-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Data Ingestion (SQL)</label>
+                  <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Read-only Access</span>
+                </div>
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-slate-900 rounded-xl blur-lg opacity-20 group-hover:opacity-30 transition-opacity" />
+                  <textarea
+                    value={createForm.sql_query}
+                    onChange={(e) => setCreateForm({ ...createForm, sql_query: e.target.value })}
+                    className="relative w-full bg-slate-900 text-slate-300 font-mono text-[10px] p-4 rounded-xl border border-slate-800 focus:border-indigo-500/50 outline-none h-32 resize-none transition-all"
+                    placeholder="SELECT COUNT(*) FROM platform_events WHERE ..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 pt-3 flex items-center justify-end gap-4 bg-slate-50/50 border-t border-slate-100">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Abort
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={creating}
+                className="bg-indigo-600 text-white px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+              >
+                {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                {creating ? "Processing..." : "Deploy Metric"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.getElementById("modal-portal")!
+      )}
+
+      <style jsx>{`
+          .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: #312e81; border-radius: 4px; }
+          .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        `}</style>
     </div>
   );
 }

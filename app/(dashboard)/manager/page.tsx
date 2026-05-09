@@ -51,7 +51,7 @@ export default function ManagerPage() {
     ? teamMembers.filter((m: any) =>
       m.name?.toLowerCase().includes(teamSearch.toLowerCase()) ||
       m.matricule?.toLowerCase().includes(teamSearch.toLowerCase()) ||
-      m.prenom?.toLowerCase().includes(teamSearch.toLowerCase())
+      m.surname?.toLowerCase().includes(teamSearch.toLowerCase())
     )
     : teamMembers;
 
@@ -641,7 +641,7 @@ export default function ManagerPage() {
                 <div className="flex items-start justify-between mb-6">
                   <div className="relative">
                     <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl bg-gradient-to-br ${COLORS[i % COLORS.length]} group-hover:scale-110 transition-transform duration-500`}>
-                      {m.name?.[0]}{m.prenom?.[0] || ""}
+                      {m.name?.[0]}{m.surname?.[0] || ""}
                     </div>
                     <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full p-0.5 shadow-sm">
                       <div className={`w-full h-full rounded-full ${m.is_active ? "bg-emerald-500 animate-pulse" : "bg-red-400"}`} />
@@ -661,7 +661,7 @@ export default function ManagerPage() {
                 <div className="space-y-4">
                   <div>
                     <h4 className="text-lg font-black text-slate-800 leading-none group-hover:text-indigo-600 transition-colors">
-                      {m.name} {m.prenom}
+                      {m.name} {m.surname}
                     </h4>
                     <div className="flex items-center gap-3 mt-3">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">

@@ -8,7 +8,7 @@ import {
   Zap, MessageSquare, Tag
 } from "lucide-react";
 import {
-  analyzeTicketAction, chatWithGostAction, createTicket,
+  analyzeTicketAction, chatWithAgentAction, createTicket,
   createTicketFromXmlAction, getChatMessagesForTicketAction,
   validateAnalysisAction, rejectAnalysisAction
 } from "@/app/actions";
@@ -19,7 +19,7 @@ import type { TicketPriority } from "@/lib/types";
 // ─── Reusable Components ───────────────────────────────────────────────────
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="mb-2 text-[12px] font-bold tracking-[0.08em] text-slate-800 uppercase">
+  <p className="mb-1.5 text-[10px] font-black tracking-[0.08em] text-slate-800 uppercase">
     {children}
   </p>
 );
@@ -35,7 +35,7 @@ const FormInput = ({
       <SectionLabel>{label}</SectionLabel>
       <div className="relative">
         {Icon && (
-          <Icon className="absolute left-5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-500" />
+          <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
         )}
         <input
           type="text"
@@ -44,10 +44,10 @@ const FormInput = ({
           placeholder={placeholder}
           readOnly={readOnly}
           className={`
-            w-full h-[46px] rounded-full border border-slate-300 bg-slate-50 text-slate-900 
-            placeholder:text-slate-400 text-[14px] font-medium transition-all
+            w-full h-9 rounded-full border border-slate-300 bg-slate-50 text-slate-900 
+            placeholder:text-slate-400 text-[12px] font-bold transition-all
             focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white
-            ${Icon ? 'pl-12 pr-5' : 'px-5'}
+            ${Icon ? 'pl-10 pr-4' : 'px-4'}
             ${readOnly ? 'opacity-70 cursor-not-allowed bg-slate-100' : 'hover:border-slate-400'}
           `}
         />
@@ -68,17 +68,17 @@ const FormSelect = ({
       <SectionLabel>{label}</SectionLabel>
       <div className="relative group">
         {Icon && (
-          <Icon className="absolute left-5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-500 z-10" />
+          <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 z-10" />
         )}
         <select
           value={value}
           onChange={onChange}
           disabled={disabled}
           className={`
-            appearance-none w-full h-[46px] rounded-full border border-slate-300 text-slate-900 
-            text-[14px] font-medium transition-all cursor-pointer relative z-0
+            appearance-none w-full h-9 rounded-full border border-slate-300 text-slate-900 
+            text-[12px] font-bold transition-all cursor-pointer relative z-0
             focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600
-            ${Icon ? 'pl-12 pr-10' : 'px-5 pr-10'}
+            ${Icon ? 'pl-10 pr-10' : 'px-4 pr-10'}
             ${colorClass || 'bg-slate-50 hover:border-slate-400 focus:bg-white'}
             ${disabled ? 'opacity-70 cursor-not-allowed bg-slate-100' : ''}
           `}
@@ -89,7 +89,7 @@ const FormSelect = ({
             </option>
           ))}
         </select>
-        <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none z-10" />
+        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none z-10" />
       </div>
     </div>
   );
@@ -169,7 +169,7 @@ interface AnalysisResult {
   impactedTables: { name: string; confidence: number }[];
   sqlProposal: string;
   recommendation: string;
-  gostSummary: string;
+  agentSummary: string;
 }
 
 interface ChatMessage {
@@ -235,11 +235,11 @@ export default function LabPage() {
             setTicketTitle(existing.title);
             setTicketDesc(existing.description);
             setPriority(existing.priority as TicketPriority);
-            setUrgency(existing.priority.includes("Critical") || existing.priority.includes("High") ? "1 - High" : "3 - Low");
+            setUrgency(existing.priority?.includes("Critical") || existing.priority?.includes("High") ? "1 - High" : "3 - Low");
             setOpenedBy(existing.openedBy || "");
             setOpenedAt(existing.openedAt || "");
             setClosedAt(existing.closedAt || "");
-            setState(existing.state || "");
+            setRejectReason(existing.agentSummary || "");
             setComments(existing.comments || "");
             setResult(null);
             setDecision("idle");
@@ -418,8 +418,8 @@ export default function LabPage() {
     setChatInput("");
     setChatTyping(true);
     try {
-      const gHistory = chatMessages.map(m => ({ role: m.role === 'AI' ? 'assistant' : 'user', content: m.content }));
-      const reply = await chatWithGostAction(ticketId, chatInput, gHistory);
+      const history = chatMessages.map(m => ({ role: m.role === 'AI' ? 'assistant' : 'user', content: m.content }));
+      const reply = await chatWithAgentAction(ticketId, chatInput, history);
       setChatTyping(false);
       setChatMessages((p) => [...p, { role: "AI", content: reply, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
     } catch (err) {
@@ -437,546 +437,508 @@ export default function LabPage() {
   }
 
   return (
-    <div className="min-h-screen bg-transparent flex flex-col font-sans selection:bg-violet-200 selection:text-violet-900 relative">
-      <div className="max-w-4xl w-full mx-auto px-6 py-8 relative z-10">
+    <div className="w-full max-w-5xl mx-auto px-6 pt-8 pb-4 relative z-10 flex flex-col items-center">
+      {/* Top Header - Centered & Aligned */}
+      <div className="mb-8 flex items-center gap-4 text-left w-full max-w-4xl px-4">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
+          <FlaskConical className="w-6 h-6 text-white" />
+        </div>
+        <div className="flex flex-col justify-center">
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none flex items-center gap-2">
+            Analysis <span className="text-indigo-500 ">Lab</span>
+          </h1>
+          <p className="text-[11px] font-bold text-slate-400 mt-1.5 uppercase tracking-[0.2em]">Diagnostic Ingestion Workspace</p>
+        </div>
+      </div>
 
-        {/* Out-of-card Title */}
-        <div className="p-6 max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-sm">
-              <FlaskConical className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-800">Analysis Lab</h2>
-              <p className="text-sm text-slate-400">Enter your Ticket and Let AI diagnose and resolve it</p>
-            </div>
+      {/* Main Card */}
+      <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/60 shadow-xl overflow-hidden shadow-indigo-100/30">
+
+        {/* Inner Card Header */}
+        <div className="flex items-center justify-between px-6 py-3.5 bg-slate-50/80 border-b border-slate-100 backdrop-blur-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+            <span className="text-slate-900 font-black text-[10px] uppercase tracking-[0.15em]">Ticket Ingestion</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <ActionButton
+              onClick={() => fileInputRef.current?.click()}
+              icon={Upload}
+              variant="primary"
+              className="h-9 px-4 text-[10px]"
+            >
+              IMPORT XML
+            </ActionButton>
           </div>
         </div>
 
-        {/* Main Card */}
-        <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm overflow-hidden">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xml,text/xml,application/xml"
+          className="hidden"
+          onChange={handleXmlFileSelect}
+        />
 
-          {/* Inner Card Header */}
-          <div className="flex items-center justify-between px-8 py-5 border-b border-slate-100">
-            <div className="flex items-center gap-2 text-slate-900 font-bold text-[13px] tracking-wide">
-              <Sparkles className="w-4 h-4 text-violet-600" />
-              NEW TICKET ANALYSIS REQUEST
+        {/* Warnings Panel */}
+        {importWarnings.length > 0 && (
+          <div className="mx-8 mt-6 bg-rose-50 border border-rose-100 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+              <SectionLabel className="text-rose-900">Import Warnings</SectionLabel>
             </div>
-            <div className="flex items-center gap-3">
-              <ActionButton
-                onClick={() => fileInputRef.current?.click()}
-                icon={Upload}
-                variant="primary"
-              >
-                IMPORT XML
-              </ActionButton>
-              <ActionButton
-                onClick={handleReset}
-                variant="ghost"
-              >
-                EMPTY
-              </ActionButton>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+              {importWarnings.map((w, i) => (
+                <li key={i} className="text-[11px] text-rose-800 font-bold flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-rose-400 rounded-full shrink-0" />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Form Body Top Section */}
+        <div className="px-6 pt-5 pb-5">
+          <div className="grid grid-cols-12 gap-x-5 gap-y-4">
+            {/* Row 1 */}
+            <div className="col-span-4">
+              <label className="mb-1.5 block text-[10px] font-bold tracking-[0.08em] text-slate-800 uppercase">
+                INCIDENT NUMBER
+              </label>
+
+              <input
+                type="text"
+                value={ticketId}
+                readOnly
+                placeholder="Import required..."
+                className="w-full h-9 px-5 rounded-full border border-slate-200 bg-slate-100/50 text-[12px] text-slate-900 font-bold placeholder:text-slate-400 cursor-not-allowed focus:outline-none transition-all"
+              />
+            </div>
+            <FormInput
+              className="col-span-4"
+              label="OPENED AT"
+              icon={Calendar}
+              value={openedAt}
+              onChange={(e) => setOpenedAt(e.target.value)}
+              placeholder=""
+              readOnly={true}
+            />
+            <FormInput
+              className="col-span-4"
+              label="CLOSED AT"
+              icon={Calendar}
+              value={closedAt}
+              onChange={(e) => setClosedAt(e.target.value)}
+              placeholder=""
+              readOnly={true}
+            />
+
+            {/* Row 2 */}
+            <FormInput
+              className="col-span-4"
+              label="CALLER"
+              icon={Search}
+              value={openedBy}
+              onChange={(e) => setOpenedBy(e.target.value)}
+              placeholder=""
+              readOnly={true}
+            />
+            <FormSelect
+              className="col-span-4"
+              label="URGENCY"
+              value={urgency}
+              onChange={(e) => setUrgency(e.target.value)}
+              disabled={true}
+              colorClass={getUrgencyColor(urgency)}
+              options={[
+                { value: "", label: "Select Urgency" },
+                { value: "1 - High", label: "High" },
+                { value: "2 - Medium", label: "Medium" },
+                { value: "3 - Low", label: "Low" },
+              ]}
+            />
+            <FormSelect
+              className="col-span-4"
+              label="STATE"
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              disabled={true}
+              colorClass={getStateColor(state)}
+              options={[
+                { value: "", label: "Select State" },
+                { value: "New", label: "New" },
+                { value: "In Progress", label: "In Progress" },
+                { value: "On Hold", label: "On Hold" },
+                { value: "Resolved", label: "Resolved" },
+                { value: "Closed", label: "Closed" },
+                { value: "Canceled", label: "Canceled" },
+              ]}
+            />
+
+            {/* Row 3 */}
+            <FormInput
+              className="col-span-6"
+              label="WATCH LIST"
+              icon={User}
+              value={stakeholders}
+              onChange={(e) => setStakeholders(e.target.value)}
+              placeholder="Additional stakeholders..."
+              readOnly={true}
+            />
+            <FormSelect
+              className="col-span-6"
+              label="ANALYSIS PRIORITY"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as any)}
+              disabled={true}
+              colorClass={getPriorityColor(priority)}
+              options={[
+                { value: "", label: "Select Priority" },
+                { value: "1 - Critical", label: "Critical" },
+                { value: "2 - High", label: "High" },
+                { value: "3 - Moderate", label: "Moderate" },
+                { value: "4 - Low", label: "Low" },
+                { value: "5 - Planning", label: "Planning" },
+              ]}
+            />
+
+            {/* Advanced Descriptions matching the image structure */}
+            <div className="col-span-12 mt-3">
+              <div className="flex items-center gap-2 text-slate-900 mb-2 pointer-events-none">
+                <Tag className="w-[14px] h-[14px]" />
+                <span className="text-[11px] font-black tracking-[0.08em] uppercase">SHORT DESCRIPTION (TITLE)</span>
+              </div>
+              <div className="relative">
+                <FileText className="absolute left-5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-500" />
+                <input
+                  type="text"
+                  value={ticketTitle}
+                  onChange={(e) => { setTicketTitle(e.target.value); setResult(null); setDecision("idle"); }}
+                  placeholder="Unable to access the shared folder."
+                  readOnly={true}
+                  className="w-full h-[46px] rounded-full border border-slate-300 bg-slate-50 text-slate-900 text-[14px] font-medium pl-12 pr-5 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="col-span-12 grid grid-cols-12 gap-x-5 gap-y-1.5 mt-2">
+              <div className="col-span-6 flex items-center gap-1.5 text-slate-900">
+                <MessageSquare className="w-3 h-3" />
+                <span className="text-[10px] font-black tracking-[0.08em] uppercase">INTERNAL DESCRIPTION</span>
+              </div>
+              <div className="col-span-6 flex items-center">
+                <span className="text-[10px] font-black tracking-[0.08em] uppercase text-slate-900">COMMENTS</span>
+              </div>
+
+              <div className="col-span-6">
+                <textarea
+                  value={ticketDesc}
+                  onChange={(e) => { setTicketDesc(e.target.value); setResult(null); setDecision("idle"); }}
+                  placeholder="..."
+                  readOnly={true}
+                  className="w-full min-h-[80px] px-6 py-4 rounded-[32px] border border-slate-300 bg-slate-50 text-slate-900 font-medium text-[12px] resize-none focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white transition-all"
+                />
+              </div>
+              <div className="col-span-6">
+                <textarea
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder="..."
+                  readOnly={true}
+                  className="w-full min-h-[80px] px-6 py-4 rounded-[32px] border border-slate-300 bg-slate-50 text-slate-900 font-medium text-[12px] resize-none focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white transition-all"
+                />
+              </div>
             </div>
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xml,text/xml,application/xml"
-            className="hidden"
-            onChange={handleXmlFileSelect}
-          />
-
-          {/* Warnings Panel */}
-          {importWarnings.length > 0 && (
-            <div className="mx-8 mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="w-4 h-4 text-amber-600" />
-                <SectionLabel>Import Warnings</SectionLabel>
-              </div>
-              <ul className="grid grid-cols-2 gap-x-6 gap-y-1">
-                {importWarnings.map((w, i) => (
-                  <li key={i} className="text-[12px] text-amber-900 font-bold flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
-                    {w}
-                  </li>
-                ))}
-              </ul>
+          {error && (
+            <div className="mt-6 p-4 bg-rose-600 text-white rounded-[20px] flex items-center gap-3 shadow-md">
+              <AlertCircle className="w-5 h-5" />
+              <p className="text-sm font-bold">{error}</p>
             </div>
           )}
 
-          {/* Form Body Top Section */}
-          <div className="px-8 pt-7 pb-6">
-            <div className="grid grid-cols-12 gap-x-6 gap-y-5">
-              {/* Row 1 */}
-              <div className="col-span-4">
-                <label className="mb-2 block text-[12px] font-bold tracking-[0.08em] text-slate-800 uppercase">
-                  INCIDENT NUMBER
-                </label>
-
-                <div className="relative flex items-center">
-                  <span className="absolute left-4 text-slate-500 font-bold">
-                    INC
-                  </span>
-                  <input
-                    type="text"
-                    value={ticketId.replace(/^INC/, "")}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[^0-9]/g, "");
-                      setTicketId(`INC${value}`);
-                    }}
-                    placeholder="0000000"
-                    readOnly={isImported}
-                    className="w-full h-[46px] pl-[52px] pr-[100px] rounded-full border border-slate-300 bg-slate-50 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white"
-                  />
-                  {!isImported && (
-                    <button
-                      onClick={generateUniqueIncident}
-                      disabled={isGeneratingId}
-                      className="absolute right-1.5 h-[34px] px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold tracking-wider rounded-full transition-colors disabled:opacity-50"
-                    >
-                      {isGeneratingId ? "..." : "GENERATE"}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <FormInput
-                className="col-span-4"
-                label="OPENED AT"
-                icon={Calendar}
-                value={openedAt}
-                onChange={(e) => setOpenedAt(e.target.value)}
-                placeholder=""
-                readOnly={isImported}
-              />
-              <FormInput
-                className="col-span-4"
-                label="CLOSED AT"
-                icon={Calendar}
-                value={closedAt}
-                onChange={(e) => setClosedAt(e.target.value)}
-                placeholder=""
-                readOnly={isImported}
-              />
-
-              {/* Row 2 */}
-              <FormInput
-                className="col-span-4"
-                label="CALLER"
-                icon={Search}
-                value={openedBy}
-                onChange={(e) => setOpenedBy(e.target.value)}
-                placeholder=""
-                readOnly={isImported}
-              />
-              <FormSelect
-                className="col-span-4"
-                label="URGENCY"
-                value={urgency}
-                onChange={(e) => setUrgency(e.target.value)}
-                disabled={isImported}
-                colorClass={getUrgencyColor(urgency)}
-                options={[
-                  { value: "", label: "Select Urgency" },
-                  { value: "1 - High", label: "High" },
-                  { value: "2 - Medium", label: "Medium" },
-                  { value: "3 - Low", label: "Low" },
-                ]}
-              />
-              <FormSelect
-                className="col-span-4"
-                label="STATE"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                disabled={isImported}
-                colorClass={getStateColor(state)}
-                options={[
-                  { value: "", label: "Select State" },
-                  { value: "New", label: "New" },
-                  { value: "In Progress", label: "In Progress" },
-                  { value: "On Hold", label: "On Hold" },
-                  { value: "Resolved", label: "Resolved" },
-                  { value: "Closed", label: "Closed" },
-                  { value: "Canceled", label: "Canceled" },
-                ]}
-              />
-
-              {/* Row 3 */}
-              <FormInput
-                className="col-span-6"
-                label="WATCH LIST"
-                icon={User}
-                value={stakeholders}
-                onChange={(e) => setStakeholders(e.target.value)}
-                placeholder="Additional stakeholders..."
-                readOnly={isImported}
-              />
-              <FormSelect
-                className="col-span-6"
-                label="ANALYSIS PRIORITY"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as any)}
-                disabled={isImported}
-                colorClass={getPriorityColor(priority)}
-                options={[
-                  { value: "", label: "Select Priority" },
-                  { value: "1 - Critical", label: "Critical" },
-                  { value: "2 - High", label: "High" },
-                  { value: "3 - Moderate", label: "Moderate" },
-                  { value: "4 - Low", label: "Low" },
-                  { value: "5 - Planning", label: "Planning" },
-                ]}
-              />
-
-              {/* Advanced Descriptions matching the image structure */}
-              <div className="col-span-12 mt-3">
-                <div className="flex items-center gap-2 text-slate-900 mb-2 pointer-events-none">
-                  <Tag className="w-[14px] h-[14px]" />
-                  <span className="text-[11px] font-black tracking-[0.08em] uppercase">SHORT DESCRIPTION (TITLE)</span>
-                </div>
-                <div className="relative">
-                  <FileText className="absolute left-5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-500" />
-                  <input
-                    type="text"
-                    value={ticketTitle}
-                    onChange={(e) => { setTicketTitle(e.target.value); setResult(null); setDecision("idle"); }}
-                    placeholder="Unable to access the shared folder."
-                    readOnly={isImported}
-                    className="w-full h-[46px] rounded-full border border-slate-300 bg-slate-50 text-slate-900 text-[14px] font-medium pl-12 pr-5 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-12 grid grid-cols-12 gap-x-6 gap-y-2 mt-3">
-                <div className="col-span-6 flex items-center gap-2 text-slate-900 mb-1">
-                  <MessageSquare className="w-[14px] h-[14px]" />
-                  <span className="text-[11px] font-black tracking-[0.08em] uppercase">INTERNAL DESCRIPTION</span>
-                </div>
-                <div className="col-span-6 mb-1 flex items-center">
-                  <span className="text-[11px] font-black tracking-[0.08em] uppercase text-slate-900">COMMENTS</span>
-                </div>
-
-                <div className="col-span-6">
-                  <textarea
-                    value={ticketDesc}
-                    onChange={(e) => { setTicketDesc(e.target.value); setResult(null); setDecision("idle"); }}
-                    placeholder="Please provide access. Changed the priority of the Incident."
-                    readOnly={isImported}
-                    className="w-full min-h-[90px] px-5 py-4 rounded-[20px] border border-slate-300 bg-slate-50 text-slate-900 font-medium text-[14px] resize-none focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white"
-                  />
-                </div>
-                <div className="col-span-6">
-                  <textarea
-                    value={comments}
-                    onChange={(e) => setComments(e.target.value)}
-                    placeholder="Notes visible to the end user..."
-                    readOnly={isImported}
-                    className="w-full min-h-[90px] px-5 py-4 rounded-[20px] border border-slate-300 bg-slate-50 text-slate-900 font-medium text-[14px] resize-none focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 focus:bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {error && (
-              <div className="mt-6 p-4 bg-rose-600 text-white rounded-[20px] flex items-center gap-3 shadow-md">
-                <AlertCircle className="w-5 h-5" />
-                <p className="text-sm font-bold">{error}</p>
-              </div>
-            )}
-
-            {/* Footer Buttons */}
-            <div className="mt-8 flex justify-end gap-3">
-              <ActionButton
-                onClick={handleReset}
-                variant="ghost"
-                className="px-8 h-[46px]"
-              >
-                RESET
-              </ActionButton>
-              <ActionButton
-                onClick={handleAnalyse}
-                disabled={isAnalysing || decision === "validated"}
-                loading={isAnalysing}
-                variant="primary"
-                icon={Zap}
-                className="px-8 h-[46px]"
-              >
-                {decision === "validated" ? "VALIDATED" : "TRIGGER AI ANALYSIS"}
-              </ActionButton>
-            </div>
+          {/* Footer Buttons */}
+          <div className="mt-8 flex justify-end gap-3">
+            <ActionButton
+              onClick={handleReset}
+              variant="ghost"
+              className="px-8 h-[46px]"
+            >
+              RESET
+            </ActionButton>
+            <ActionButton
+              onClick={handleAnalyse}
+              disabled={isAnalysing || decision === "validated"}
+              loading={isAnalysing}
+              variant="primary"
+              icon={Zap}
+              className="px-8 h-[46px]"
+            >
+              {decision === "validated" ? "VALIDATED" : "TRIGGER AI ANALYSIS"}
+            </ActionButton>
           </div>
         </div>
+      </div>
 
-        {/* ─── Result Section ─── */}
-        {result && (
-          <div className="mt-12 space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-            {/* Analysis Dashboard Card */}
-            <div className="bg-white/95 backdrop-blur-sm rounded-[28px] border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-8 pt-10 pb-8">
-                <div className="flex items-start justify-between mb-8">
-                  <div className="flex items-center gap-5">
-                    <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-md">
-                      <Bot className="w-7 h-7" />
-                    </div>
-                    <div>
-                      <h2 className="text-[28px] font-black text-slate-900 tracking-tight">Diagnostic Report</h2>
-                      <div className="flex items-center gap-2.5 mt-1 flex-wrap">
-                        <span className="text-[12px] font-bold text-slate-600 uppercase tracking-wider bg-slate-100 px-3 py-1 rounded-lg">ID: {result.incidentId}</span>
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                        <p className="text-[12px] font-black text-emerald-600 uppercase tracking-wider">Neural Link Synchronized</p>
-                      </div>
-                    </div>
+      {/* ─── Result Section ─── */}
+      {result && (
+        <div className="mt-12 space-y-8 animate-in slide-in-from-bottom-6 duration-700">
+          {/* Analysis Dashboard Card */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 pt-6 pb-6">
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md">
+                    <Bot className="w-5 h-5" />
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">AI Confidence</p>
-                      <p className="text-3xl font-black text-slate-900 tracking-tight">{result.confidence}%</p>
-                    </div>
-                    <div className={`
-                      h-14 px-6 rounded-2xl flex items-center justify-center text-[13px] font-bold uppercase tracking-wider shadow-sm transition-all
-                      ${result.urgency === 'critical' ? 'bg-rose-600 text-white' :
-                        result.urgency === 'high' ? 'bg-orange-600 text-white' :
-                          result.urgency === 'medium' ? 'bg-amber-500 text-white' :
-                            'bg-emerald-600 text-white'}
-                    `}>
-                      {result.urgency}
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">Diagnostic Report</h2>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded">ID: {result.incidentId}</span>
                     </div>
                   </div>
                 </div>
-
-                <div className="w-full bg-slate-100 rounded-full h-3 mb-10 overflow-hidden">
-                  <div
-                    className="h-full bg-violet-600 rounded-full transition-all duration-1000 relative"
-                    style={{ width: `${result.confidence}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white/20" />
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Confidence</p>
+                    <p className="text-xl font-black text-slate-900 tracking-tight">{result.confidence}%</p>
                   </div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-2 gap-6 mb-8">
-                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-                    <SectionLabel>Diagnostic Root Cause</SectionLabel>
-                    <p className="text-[15px] text-slate-900 leading-relaxed font-bold mt-1">
-                      {result.rootCause}
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-                    <SectionLabel>Structural Impact</SectionLabel>
-                    <div className="space-y-4 mt-2">
-                      {result.impactedTables.length > 0 ? result.impactedTables.map((t) => (
-                        <div key={t.name} className="flex items-center justify-between group/table">
-                          <span className="text-[13px] font-black font-mono text-slate-700 uppercase tracking-tight">
-                            {t.name}
-                          </span>
-                          <div className="flex items-center gap-3">
-                            <div className="w-24 bg-slate-200 rounded-full h-2 overflow-hidden">
-                              <div className="h-full bg-violet-500 rounded-full" style={{ width: `${t.confidence}%` }} />
-                            </div>
-                            <span className="text-[12px] font-bold text-slate-500 w-8">{t.confidence}%</span>
-                          </div>
-                        </div>
-                      )) : (
-                        <p className="text-[13px] text-slate-400 font-bold italic">No specific table impact detected</p>
-                      )}
-                    </div>
-                  </div>
+              <div className="w-full bg-slate-100 rounded-full h-2 mb-6 overflow-hidden">
+                <div
+                  className="h-full bg-violet-600 rounded-full transition-all duration-1000 relative"
+                  style={{ width: `${result.confidence}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20" />
                 </div>
+              </div>
 
-                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 mb-8">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Info className="w-5 h-5 text-violet-600" />
-                    <SectionLabel>Step-by-Step Resolution</SectionLabel>
-                  </div>
-                  <p className="text-[15px] text-slate-900 leading-relaxed font-bold">
-                    {result.recommendation}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <SectionLabel>Root Cause</SectionLabel>
+                  <p className="text-[13px] text-slate-900 leading-relaxed font-bold mt-1">
+                    {result.rootCause}
                   </p>
                 </div>
-
-                {/* ─── SQL Solution Block ─── */}
-                <div className="bg-slate-900 rounded-2xl overflow-hidden shadow-md transition-all duration-300">
-                  <div
-                    className="px-6 py-5 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors border-b border-slate-800"
-                    onClick={() => setSqlExpanded(!sqlExpanded)}
-                  >
-                    <div className="flex items-center gap-3 text-white">
-                      <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
-                      <span className="text-[13px] font-black uppercase tracking-[0.1em]">Automated SQL Recovery</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); copySQL(); }}
-                        className="flex items-center gap-2 text-[11px] font-bold text-slate-100 hover:text-white transition-colors uppercase tracking-widest bg-indigo-600 px-3 py-1.5 rounded-lg border border-indigo-500"
-                      >
-                        {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                        {copied ? "COPIED" : "COPY"}
-                      </button>
-                      {sqlExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-                    </div>
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <SectionLabel>Structural Impact</SectionLabel>
+                  <div className="space-y-3 mt-1.5">
+                    {result.impactedTables.length > 0 ? result.impactedTables.map((t) => (
+                      <div key={t.name} className="flex items-center justify-between group/table">
+                        <span className="text-[11px] font-black font-mono text-slate-700 uppercase tracking-tight">
+                          {t.name}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-full bg-violet-500 rounded-full" style={{ width: `${t.confidence}%` }} />
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-500 w-7">{t.confidence}%</span>
+                        </div>
+                      </div>
+                    )) : (
+                      <p className="text-[11px] text-slate-400 font-bold italic">No table impact</p>
+                    )}
                   </div>
-                  {sqlExpanded && (
-                    <div className="p-6 bg-slate-950 font-mono text-[14px] text-emerald-400 leading-relaxed overflow-x-auto selection:bg-emerald-500/30 font-bold">
-                      <pre>{result.sqlProposal}</pre>
-                    </div>
-                  )}
                 </div>
+              </div>
 
-                {/* Execution Actions - Chat with AI included */}
-                <div className="mt-10 flex items-center gap-4 pt-8 border-t border-slate-200">
-                  {decision === "idle" && (
-                    <>
-                      <ActionButton
-                        onClick={handleValidate}
-                        variant="success"
-                        icon={CheckCircle}
-                        className="flex-1 h-14 rounded-2xl text-[14px]"
-                      >
-                        VALIDATE & COMMIT FIX
-                      </ActionButton>
-                      <ActionButton
-                        onClick={() => setShowRejectInput(!showRejectInput)}
-                        variant="danger"
-                        icon={XCircle}
-                        className="h-14 px-8 rounded-2xl text-[14px]"
-                      >
-                        REJECT PROPOSAL
-                      </ActionButton>
-                    </>
-                  )}
-                  <ActionButton
-                    onClick={() => setChatOpen(!chatOpen)}
-                    variant="secondary"
-                    icon={MessageSquare}
-                    className={`h-14 px-8 rounded-2xl text-[14px] ${decision !== 'idle' ? 'flex-1' : ''}`}
-                  >
-                    CHAT WITH AI
-                  </ActionButton>
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Info className="w-4 h-4 text-violet-600" />
+                  <SectionLabel>Resolution Recommendation</SectionLabel>
                 </div>
+                <p className="text-[13px] text-slate-900 leading-relaxed font-bold">
+                  {result.recommendation}
+                </p>
+              </div>
 
-                {showRejectInput && decision === "idle" && (
-                  <div className="mt-6 p-6 bg-rose-50 border border-rose-200 rounded-2xl animate-in slide-in-from-top-4 duration-400">
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertCircle className="w-5 h-5 text-rose-600" />
-                      <SectionLabel>Improvement Feedback</SectionLabel>
-                    </div>
-                    <textarea
-                      value={rejectReason}
-                      onChange={(e) => setRejectReason(e.target.value)}
-                      placeholder="Describe why this solution is inaccurate..."
-                      className="w-full bg-white rounded-xl p-4 text-[14px] font-bold text-slate-900 border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-600 transition-all resize-none mb-4"
-                      rows={2}
-                    />
-                    <div className="flex justify-end">
-                      <ActionButton onClick={handleReject} variant="danger">
-                        CONFIRM REJECT
-                      </ActionButton>
-                    </div>
+              {/* ─── SQL Solution Block ─── */}
+              <div className="bg-slate-900 rounded-2xl overflow-hidden shadow-md transition-all duration-300">
+                <div
+                  className="px-6 py-5 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors border-b border-slate-800"
+                  onClick={() => setSqlExpanded(!sqlExpanded)}
+                >
+                  <div className="flex items-center gap-3 text-white">
+                    <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
+                    <span className="text-[13px] font-black uppercase tracking-[0.1em]">Automated SQL Recovery</span>
                   </div>
-                )}
-
-                {decision === 'validated' && (
-                  <div className="mt-10 p-7 bg-emerald-600 rounded-[28px] flex items-center gap-5 shadow-md">
-                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center">
-                      <CheckCircle className="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-black text-white tracking-tight">Diagnostic Validated</h3>
-                      <p className="text-[14px] text-emerald-50 font-bold mt-1">The resolution logic has been stored for {result.incidentId}.</p>
-                    </div>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); copySQL(); }}
+                      className="flex items-center gap-2 text-[11px] font-bold text-slate-100 hover:text-white transition-colors uppercase tracking-widest bg-indigo-600 px-3 py-1.5 rounded-lg border border-indigo-500"
+                    >
+                      {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                      {copied ? "COPIED" : "COPY"}
+                    </button>
+                    {sqlExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
                   </div>
-                )}
-
-                {decision === 'rejected' && (
-                  <div className="mt-10 p-7 bg-rose-600 rounded-[28px] flex items-center gap-5 shadow-md">
-                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center">
-                      <XCircle className="w-6 h-6 text-rose-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-black text-white tracking-tight">Diagnostic Rejected</h3>
-                      <p className="text-[14px] text-rose-50 font-bold mt-1">{rejectReason || "Feedback has been flagged for retraining."}</p>
-                    </div>
+                </div>
+                {sqlExpanded && (
+                  <div className="p-6 bg-slate-950 font-mono text-[14px] text-emerald-400 leading-relaxed overflow-x-auto selection:bg-emerald-500/30 font-bold">
+                    <pre>{result.sqlProposal}</pre>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* ─── AI Chat Panel ─── */}
-        {chatOpen && (
-          <div className="mt-8 bg-white rounded-[28px] shadow-sm overflow-hidden border border-slate-200 animate-in slide-in-from-bottom-6 duration-400">
-            <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
-                    <Bot className="w-6 h-6" />
-                  </div>
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
-                </div>
-                <div>
-                  <h3 className="text-[14px] font-black text-slate-900 uppercase tracking-wider">Mistral Node</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Active Analysis Protocol</p>
-                </div>
+              {/* Execution Actions - Chat with AI included */}
+              <div className="mt-8 flex items-center gap-2 pt-6 border-t border-slate-100">
+                {decision === "idle" && (
+                  <>
+                    <ActionButton
+                      onClick={handleValidate}
+                      variant="success"
+                      icon={CheckCircle}
+                      className="flex-1 h-10 rounded-lg text-[11px]"
+                    >
+                      VALIDATE & COMMIT
+                    </ActionButton>
+                    <ActionButton
+                      onClick={() => setShowRejectInput(!showRejectInput)}
+                      variant="danger"
+                      icon={XCircle}
+                      className="h-10 px-5 rounded-lg text-[11px]"
+                    >
+                      REJECT
+                    </ActionButton>
+                  </>
+                )}
+                <ActionButton
+                  onClick={() => setChatOpen(!chatOpen)}
+                  variant="secondary"
+                  icon={MessageSquare}
+                  className={`h-10 px-5 rounded-lg text-[11px] ${decision !== 'idle' ? 'flex-1' : ''}`}
+                >
+                  DISCUSS
+                </ActionButton>
               </div>
-              <button
-                onClick={() => setChatOpen(false)}
-                className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-300 transition-all"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="h-[420px] overflow-y-auto p-8 space-y-6 bg-slate-50/50">
-              {chatMessages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "User" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                  <div className={`
-                    max-w-[80%] px-6 py-4 rounded-2xl text-[14px] font-bold leading-relaxed shadow-sm border
-                    ${msg.role === "User" ?
-                      "bg-violet-600 text-white border-violet-700 rounded-tr-none" :
-                      "bg-white text-slate-900 border-slate-200 rounded-tl-none"}
-                  `}>
-                    {msg.content}
-                    <p className={`text-[10px] mt-2 font-black uppercase tracking-widest ${msg.role === "User" ? "text-violet-200" : "text-slate-400"}`}>
-                      {msg.time}
-                    </p>
+              {showRejectInput && decision === "idle" && (
+                <div className="mt-6 p-6 bg-rose-50 border border-rose-200 rounded-2xl animate-in slide-in-from-top-4 duration-400">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertCircle className="w-5 h-5 text-rose-600" />
+                    <SectionLabel>Improvement Feedback</SectionLabel>
                   </div>
-                </div>
-              ))}
-              {chatTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-white border border-slate-200 px-6 py-5 rounded-2xl rounded-tl-none shadow-sm">
-                    <div className="flex gap-2">
-                      <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                      <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                      <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce" />
-                    </div>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Describe why this solution is inaccurate..."
+                    className="w-full bg-white rounded-xl p-4 text-[14px] font-bold text-slate-900 border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-600 transition-all resize-none mb-4"
+                    rows={2}
+                  />
+                  <div className="flex justify-end">
+                    <ActionButton onClick={handleReject} variant="danger">
+                      CONFIRM REJECT
+                    </ActionButton>
                   </div>
                 </div>
               )}
-              <div ref={chatBottomRef} />
-            </div>
 
-            <div className="p-6 border-t border-slate-100 bg-white">
-              <div className="relative">
-                <input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                  placeholder="Inquire about resolution logic or specific data tables..."
-                  className="w-full h-14 bg-slate-50 border border-slate-300 rounded-xl px-5 pr-14 text-[14px] font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 transition-all"
-                />
-                <button
-                  onClick={sendChat}
-                  disabled={!chatInput.trim() || chatTyping}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-violet-600 rounded-lg flex items-center justify-center text-white hover:bg-violet-700 transition-all disabled:opacity-50"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
+              {decision === 'validated' && (
+                <div className="mt-8 p-6 bg-emerald-600 rounded-2xl flex items-center gap-4 shadow-lg shadow-emerald-900/20">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
+                    <CheckCircle className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white tracking-tight">Diagnostic Validated</h3>
+                    <p className="text-[12px] text-emerald-100 font-bold opacity-80">Resolution logic stored for {result.incidentId}.</p>
+                  </div>
+                </div>
+              )}
+
+              {decision === 'rejected' && (
+                <div className="mt-8 p-6 bg-slate-900 rounded-2xl flex items-center gap-4 shadow-lg shadow-slate-900/20">
+                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                    <XCircle className="w-5 h-5 text-rose-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white tracking-tight uppercase">Diagnostic Rejected</h3>
+                    <p className="text-[12px] text-slate-400 font-bold mt-0.5">{rejectReason || "Feedback flagged for retraining."}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* ─── AI Chat Panel ─── */}
+      {chatOpen && (
+        <div className="mt-8 bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in slide-in-from-bottom-6 duration-500">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
+                  <Bot className="w-6 h-6" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-black text-slate-900 uppercase tracking-wider">FORS Agent</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">FORS Core Intelligence</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setChatOpen(false)}
+              className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-300 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="h-[420px] overflow-y-auto p-8 space-y-6 bg-slate-50/50">
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === "User" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                <div className={`
+                    max-w-[80%] px-6 py-4 rounded-2xl text-[14px] font-bold leading-relaxed shadow-sm border
+                    ${msg.role === "User" ?
+                    "bg-violet-600 text-white border-violet-700 rounded-tr-none" :
+                    "bg-white text-slate-900 border-slate-200 rounded-tl-none"}
+                  `}>
+                  {msg.content}
+                  <p className={`text-[10px] mt-2 font-black uppercase tracking-widest ${msg.role === "User" ? "text-violet-200" : "text-slate-400"}`}>
+                    {msg.time}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {chatTyping && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-slate-200 px-6 py-5 rounded-2xl rounded-tl-none shadow-sm">
+                  <div className="flex gap-2">
+                    <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce" />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={chatBottomRef} />
+          </div>
+
+          <div className="p-6 border-t border-slate-100 bg-white">
+            <div className="relative">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendChat()}
+                placeholder="Inquire about resolution logic or specific data tables..."
+                className="w-full h-14 bg-slate-50 border border-slate-300 rounded-xl px-5 pr-14 text-[14px] font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-600 transition-all"
+              />
+              <button
+                onClick={sendChat}
+                disabled={!chatInput.trim() || chatTyping}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-violet-600 rounded-lg flex items-center justify-center text-white hover:bg-violet-700 transition-all disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

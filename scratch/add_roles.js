@@ -18,14 +18,14 @@ async function main() {
         const hashManager = bcrypt.hashSync('manager2025', 10);
         
         await pool.execute(
-            `INSERT INTO users (matricule, name, prenom, username, email, password, role, is_active, created_at)
+            `INSERT INTO users (matricule, name, surname, username, email, password, role, is_active, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())
              ON DUPLICATE KEY UPDATE password = VALUES(password), role = VALUES(role)`,
             ['REP01', 'Test', 'Reporter', 'treporter', 'reporter@test.com', hashReport, 'it_report']
         );
         
         await pool.execute(
-            `INSERT INTO users (matricule, name, prenom, username, email, password, role, is_active, created_at)
+            `INSERT INTO users (matricule, name, surname, username, email, password, role, is_active, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())
              ON DUPLICATE KEY UPDATE password = VALUES(password), role = VALUES(role)`,
             ['MGR01', 'Test', 'Manager', 'tmanager', 'manager@test.com', hashManager, 'it_manager']

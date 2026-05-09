@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import clsx from "clsx";
 import { Database, Search, Table, Layers, FileJson2, ChevronRight, Key, Loader2, Terminal, Play, AlertCircle } from "lucide-react";
 import { getSystemTablesAction, getSystemTableSchemaAction, getSystemTableDataAction, executeRawSqlAction } from "@/app/actions/admin-actions";
 import { formatZeroJson } from "@/lib/translation";
@@ -14,7 +15,7 @@ export default function SuperadminDatabaseExplorer() {
   const [tableData, setTableData] = useState<any[]>([]);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"schemas" | "data" | "indexes" | "sql">("schemas");
-  
+
   const [sqlQuery, setSqlQuery] = useState("");
   const [sqlResult, setSqlResult] = useState<any[] | null>(null);
   const [sqlError, setSqlError] = useState<string | null>(null);
@@ -95,144 +96,200 @@ export default function SuperadminDatabaseExplorer() {
   }) || [];
 
   return (
-    <div className="max-w-full mx-auto space-y-5 py-4 px-2">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="w-full space-y-4 py-4 px-2 animate-in fade-in duration-500">
+
+      {/* Header Area */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-teal-200">
+          <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 shrink-0">
             <Database className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Global Database Explorer</h1>
-            <p className="text-sm text-slate-500">System-level introspection: view all tables, schemas, indexes, and raw data.</p>
+            <h1 className="text-sm font-black text-slate-800 tracking-tight leading-none">
+              Database <span className="text-indigo-500">Explorer</span>
+            </h1>
+            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Application's Database </p>
           </div>
         </div>
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter tables..." className="bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-100 w-64 shadow-sm transition-all" />
+
+        <div className="relative group">
+          <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-indigo-500 transition-colors" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search schemas..."
+            className="bg-white border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-[11px] font-bold text-slate-800 focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 w-64 shadow-sm transition-all placeholder:text-slate-400"
+          />
         </div>
       </div>
 
-      <div className="flex gap-5 min-h-[600px]">
+      <div className="flex gap-4 min-h-[850px] animate-in slide-in-from-bottom-4 duration-700">
         {/* Left sidebar — table list */}
-        <div className="w-72 shrink-0 bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tables ({filtered.length})</span>
+        <div className="w-64 shrink-0 bg-white/70 backdrop-blur-xl border border-white/60 rounded-[2rem] shadow-sm overflow-hidden flex flex-col group">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Metadata Nodes</span>
+              <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{filtered.length}</span>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
             {loading ? (
-              <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 text-teal-500 animate-spin" /></div>
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+              </div>
             ) : filtered.map(t => (
-              <button key={t.name} onClick={() => selectTable(t.name)}
-                className={`w-full flex items-center justify-between px-4 py-3 text-left hover:bg-teal-50/50 transition-colors border-b border-gray-50 group ${
-                  selected === t.name ? "bg-teal-50 border-l-2 border-l-teal-500" : ""
-                }`}
+              <button
+                key={t.name}
+                onClick={() => selectTable(t.name)}
+                className={clsx(
+                  "w-full flex items-center justify-between px-5 py-3 text-left transition-all border-b border-slate-50 group/item",
+                  selected === t.name
+                    ? "bg-indigo-50/80 border-r-4 border-r-indigo-500"
+                    : "hover:bg-slate-50"
+                )}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Table className={`w-3.5 h-3.5 shrink-0 ${selected === t.name ? "text-teal-500" : "text-gray-400"}`} />
-                  <span className={`text-xs font-semibold truncate ${selected === t.name ? "text-teal-700" : "text-slate-700"}`}>{t.name}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={clsx(
+                    "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                    selected === t.name ? "bg-indigo-100" : "bg-slate-100 group-hover/item:bg-slate-200"
+                  )}>
+                    <Table className={clsx("w-3.5 h-3.5", selected === t.name ? "text-indigo-600" : "text-slate-400")} />
+                  </div>
+                  <span className={clsx(
+                    "text-[10px] font-black uppercase tracking-tight truncate",
+                    selected === t.name ? "text-indigo-700" : "text-slate-600"
+                  )}>{t.name}</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] text-slate-400 font-mono">{t.rowCount ?? "?"}</span>
-                  <ChevronRight className={`w-3 h-3 text-gray-400 group-hover:text-teal-500 transition-colors ${selected === t.name ? "text-teal-500" : ""}`} />
-                </div>
+                <ChevronRight className={clsx("w-3 h-3 transition-transform", selected === t.name ? "text-indigo-400 translate-x-1" : "text-slate-300 opacity-0 group-hover/item:opacity-100")} />
               </button>
             ))}
           </div>
         </div>
 
-        {/* Right panel — detail */}
-        <div className="flex-1 bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        {/* Main Content */}
+        <div className="flex-1 bg-white/70 backdrop-blur-xl border border-white/60 rounded-[2rem] shadow-sm flex flex-col overflow-hidden">
           {activeTab === "sql" ? (
-            <div className="flex flex-col h-full bg-[#0f172a]">
-              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Terminal className="w-4 h-4 text-teal-400" />
-                  <span className="text-sm font-bold uppercase tracking-wider">SQL Console</span>
+            <div className="flex flex-col h-full bg-slate-900">
+              <div className="px-8 py-5 border-b border-white/5 bg-slate-950/50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-indigo-500/20 rounded-xl flex items-center justify-center">
+                    <Terminal className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <span className="text-[11px] font-black text-white uppercase tracking-widest">SQL Console</span>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => setActiveTab("schemas")} className="text-xs text-slate-400 hover:text-white transition-colors">Close Console</button>
-                </div>
+                <button
+                  onClick={() => setActiveTab("schemas")}
+                  className="text-[9px] font-black text-slate-500 hover:text-white transition-colors uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl border border-white/5"
+                >
+                  Terminate Session
+                </button>
               </div>
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Templates:</span>
-                  <button onClick={() => applyCrudTemplate("select")} className="text-[10px] font-bold bg-slate-800 text-teal-400 border border-slate-700 px-2 py-1 rounded hover:bg-slate-700 transition-colors">SELECT</button>
-                  <button onClick={() => applyCrudTemplate("insert")} className="text-[10px] font-bold bg-slate-800 text-emerald-400 border border-slate-700 px-2 py-1 rounded hover:bg-slate-700 transition-colors">INSERT</button>
-                  <button onClick={() => applyCrudTemplate("update")} className="text-[10px] font-bold bg-slate-800 text-amber-400 border border-slate-700 px-2 py-1 rounded hover:bg-slate-700 transition-colors">UPDATE</button>
-                  <button onClick={() => applyCrudTemplate("delete")} className="text-[10px] font-bold bg-slate-800 text-rose-400 border border-slate-700 px-2 py-1 rounded hover:bg-slate-700 transition-colors">DELETE</button>
+
+              <div className="p-8 space-y-6">
+                <div className="flex items-center gap-3">
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Template Macros</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => applyCrudTemplate("select")} className="text-[9px] font-black bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-3 py-1.5 rounded-xl hover:bg-indigo-500/20 transition-all uppercase tracking-widest">Select</button>
+                    <button onClick={() => applyCrudTemplate("insert")} className="text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-xl hover:bg-emerald-500/20 transition-all uppercase tracking-widest">Insert</button>
+                    <button onClick={() => applyCrudTemplate("update")} className="text-[9px] font-black bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-xl hover:bg-amber-500/20 transition-all uppercase tracking-widest">Update</button>
+                    <button onClick={() => applyCrudTemplate("delete")} className="text-[9px] font-black bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1.5 rounded-xl hover:bg-rose-500/20 transition-all uppercase tracking-widest">Delete</button>
+                  </div>
                 </div>
+
                 <textarea
-                  value={sqlQuery} onChange={e => setSqlQuery(e.target.value)}
-                  placeholder="Enter SQL query (e.g., SELECT * FROM users)..."
-                  className="w-full h-32 bg-[#1e293b] text-teal-300 font-mono text-sm p-4 rounded-xl border border-slate-700 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 resize-y selection:bg-teal-500/30"
+                  value={sqlQuery}
+                  onChange={e => setSqlQuery(e.target.value)}
+                  placeholder="-- ENTER SQL COMMANDS\nSELECT * FROM system_audit_history LIMIT 10;"
+                  className="w-full h-40 bg-slate-950/50 text-indigo-300 font-mono text-[13px] p-6 rounded-3xl border border-white/5 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 resize-none leading-relaxed placeholder:text-slate-800"
                   spellCheck={false}
                 />
-                <div className="mt-3 flex justify-end">
+
+                <div className="flex justify-between items-center px-1">
+                  <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                    Direct manipulation bypasses relational integrity checks.
+                  </p>
                   <button
-                    onClick={handleRunSql} disabled={sqlLoading || !sqlQuery.trim()}
-                    className="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 text-white px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                    onClick={handleRunSql}
+                    disabled={sqlLoading || !sqlQuery.trim()}
+                    className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3.5 rounded-[1.25rem] text-[11px] font-black uppercase tracking-[0.15em] transition-all shadow-xl shadow-indigo-500/20 active:scale-95 disabled:opacity-50"
                   >
-                    {sqlLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                    Execute
+                    {sqlLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                    {sqlLoading ? "Processing..." : "Execute Command"}
                   </button>
                 </div>
               </div>
-              <div className="flex-1 border-t border-slate-800 overflow-hidden flex flex-col bg-[#0f172a]">
+
+              <div className="flex-1 border-t border-white/5 overflow-hidden flex flex-col bg-slate-900/50 backdrop-blur-md">
                 {sqlError && (
-                  <div className="m-4 p-4 bg-red-900/20 border border-red-500/30 rounded-xl flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                    <div className="text-xs text-red-300/80 font-mono whitespace-pre-wrap">{sqlError}</div>
+                  <div className="m-8 p-6 bg-rose-500/10 border border-rose-500/20 rounded-3xl flex items-start gap-4 animate-in slide-in-from-top-4">
+                    <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest">Protocol Error</p>
+                      <p className="text-[11px] text-rose-300/80 font-mono leading-relaxed">{sqlError}</p>
+                    </div>
                   </div>
                 )}
+
                 {sqlResult && !sqlError && (
-                  <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-[#1e293b] shrink-0">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] font-mono text-slate-500">{sqlResult.length} rows returned</span>
-                        <div className="relative">
-                          <Search className="w-3 h-3 text-slate-500 absolute left-2 top-1/2 -translate-y-1/2" />
-                          <input 
-                            type="text" value={sqlFilter} onChange={e => setSqlFilter(e.target.value)} 
-                            placeholder="Filter results..." 
-                            className="bg-[#0f172a] border border-slate-700 text-slate-300 text-xs rounded-md pl-6 pr-2 py-1 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 w-48"
+                  <div className="flex-1 overflow-hidden flex flex-col animate-in fade-in duration-500">
+                    <div className="px-8 py-4 border-b border-white/5 flex items-center justify-between bg-slate-950/30 shrink-0">
+                      <div className="flex items-center gap-6">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Dataset Payload</span>
+                          <span className="text-[11px] font-black text-indigo-400 uppercase">{sqlResult.length} Rows Identified</span>
+                        </div>
+                        <div className="relative group">
+                          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-indigo-400 transition-colors" />
+                          <input
+                            type="text"
+                            value={sqlFilter}
+                            onChange={e => setSqlFilter(e.target.value)}
+                            placeholder="Filter stream..."
+                            className="bg-slate-950/50 border border-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl pl-9 pr-4 py-2 focus:outline-none focus:border-indigo-500/50 w-48 placeholder:text-slate-700"
                           />
                         </div>
                       </div>
-                      <span className="text-[11px] font-mono text-slate-500">{sqlTime?.toFixed(2)}ms</span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Latency</span>
+                        <span className="text-[11px] font-black text-indigo-400 uppercase">{sqlTime?.toFixed(2)} ms</span>
+                      </div>
                     </div>
-                    <div className="flex-1 overflow-auto custom-scrollbar">
+
+                    <div className="flex-1 overflow-auto custom-scrollbar-dark">
                       {sqlResult.length === 0 ? (
-                        <div className="p-8 text-center text-slate-500 text-sm">0 rows returned.</div>
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-600 gap-3">
+                          <Layers className="w-8 h-8 opacity-20" />
+                          <p className="text-[10px] font-black uppercase tracking-widest italic">Void Sequence • 0 records returned</p>
+                        </div>
                       ) : (
-                        <table className="w-full text-left text-xs font-mono whitespace-nowrap text-slate-300">
-                          <thead className="bg-[#1e293b] text-slate-400 sticky top-0 shadow-sm border-b border-slate-700">
+                        <table className="w-full text-left text-[11px] font-mono whitespace-nowrap text-slate-300">
+                          <thead className="bg-slate-950 text-slate-500 sticky top-0 z-10 border-b border-white/10">
                             <tr>{Object.keys(sqlResult[0]).map(k => (
-                              <th key={k} className="px-4 py-2 font-semibold align-top">
-                                <div className="flex flex-col gap-2">
-                                  <span>{k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
-                                  <input 
-                                    type="text" 
-                                    placeholder="Filter..." 
-                                    value={columnFilters[k] || ""} 
+                              <th key={k} className="px-6 py-4 font-black uppercase tracking-widest align-top">
+                                <div className="flex flex-col gap-3">
+                                  <span>{k}</span>
+                                  <input
+                                    type="text"
+                                    placeholder="Filter col..."
+                                    value={columnFilters[k] || ""}
                                     onChange={(e) => setColumnFilters(prev => ({ ...prev, [k]: e.target.value }))}
-                                    className="bg-[#0f172a] border border-slate-700 text-slate-300 text-[10px] font-normal rounded px-2 py-1 w-full focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                    className="bg-slate-900 border border-white/5 text-indigo-400 text-[9px] font-black rounded-lg px-3 py-1.5 w-full focus:outline-none focus:border-indigo-500/50 placeholder:text-slate-700 uppercase"
                                   />
                                 </div>
                               </th>
                             ))}</tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-800/50">
+                          <tbody className="divide-y divide-white/5">
                             {filteredSqlResult.map((row, i) => (
-                              <tr key={i} className="hover:bg-teal-900/20 transition-colors">
+                              <tr key={i} className="hover:bg-indigo-500/5 transition-colors group/row">
                                 {Object.values(row).map((val: any, j) => (
-                                  <td key={j} className="px-4 py-2 truncate max-w-[300px]">{val === null ? <span className="text-slate-600 italic">None</span> : formatZeroJson(val)}</td>
+                                  <td key={j} className="px-6 py-4 truncate max-w-[300px] text-slate-400 group-hover/row:text-slate-200">
+                                    {val === null ? <span className="text-slate-800 italic">NULL</span> : formatZeroJson(val)}
+                                  </td>
                                 ))}
                               </tr>
                             ))}
-                            {filteredSqlResult.length === 0 && (
-                              <tr><td colSpan={100} className="px-4 py-8 text-center text-slate-500 italic">No matching rows</td></tr>
-                            )}
                           </tbody>
                         </table>
                       )}
@@ -242,88 +299,125 @@ export default function SuperadminDatabaseExplorer() {
               </div>
             </div>
           ) : !selected ? (
-            <div className="flex-1 flex items-center justify-center flex-col gap-4 text-center p-8 relative">
-              <button 
+            <div className="flex-1 flex items-center justify-center flex-col gap-6 text-center p-12 relative group/empty">
+              <button
                 onClick={() => setActiveTab("sql")}
-                className="absolute top-4 right-4 flex items-center gap-2 text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200 px-4 py-2 rounded-xl hover:bg-teal-100 transition-colors"
+                className="absolute top-6 right-6 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-slate-900 text-white border border-slate-800 px-5 py-2.5 rounded-xl hover:bg-indigo-600 hover:border-indigo-500 transition-all shadow-xl active:scale-95"
               >
-                <Terminal className="w-4 h-4" /> SQL Console
+                <Terminal className="w-3.5 h-3.5" /> Open Command Console
               </button>
-              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center"><Database className="w-8 h-8 text-gray-300" /></div>
-              <div>
-                <p className="text-slate-500 font-medium">Select a table or open SQL Console</p>
-                <p className="text-sm text-slate-400 mt-1">Click on a table from the left panel to inspect it.</p>
+
+              <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center shadow-inner group-hover/empty:scale-110 transition-transform duration-500">
+                <Database className="w-8 h-8 text-slate-200" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Topology Mapping Required</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest max-w-[280px] leading-relaxed">
+                  Select a registered database node from the structural sidebar to initiate inspection.
+                </p>
               </div>
             </div>
           ) : schemaLoading ? (
-            <div className="flex-1 flex items-center justify-center"><Loader2 className="w-6 h-6 text-teal-500 animate-spin" /></div>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Syncing Schema Nodes...</p>
+              </div>
+            </div>
           ) : (
             <>
               {/* Table header */}
-              <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-bold text-slate-800">{selected}</h2>
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">{schema?.rowCount ?? 0} rows · {schema?.columns?.length ?? 0} columns · {schema?.indexes?.length ?? 0} indexes</p>
+              <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100">
+                    <Table className="w-5 h-5 text-indigo-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-800 tracking-tight uppercase">{selected}</h2>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Layers className="w-3 h-3" /> {schema?.columns?.length ?? 0} Attributes
+                      </span>
+                      <div className="w-1 h-1 rounded-full bg-slate-200" />
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Database className="w-3 h-3" /> {schema?.rowCount ?? 0} Records
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex justify-between items-center px-5 pt-3 border-b border-gray-100">
-                <div className="flex gap-2">
-                  {([
-                    { id: "schemas" as const, label: "Columns", icon: Layers },
-                    { id: "indexes" as const, label: "Indexes", icon: Key },
-                    { id: "data" as const, label: "Data Preview", icon: FileJson2 },
-                  ]).map(t => (
-                    <button key={t.id} onClick={() => setActiveTab(t.id)}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
-                        activeTab === t.id ? "border-teal-500 text-teal-600 bg-teal-50 rounded-t-lg" : "border-transparent text-slate-400 hover:text-slate-600 hover:bg-gray-50 rounded-t-lg"
-                      }`}
-                    >
-                      <t.icon className="w-3.5 h-3.5" /> {t.label}
-                    </button>
-                  ))}
-                </div>
-                <button 
+                <button
                   onClick={() => {
                     setSqlQuery(`SELECT * FROM ${selected} LIMIT 50;`);
                     setActiveTab("sql");
                   }}
-                  className="flex items-center gap-1.5 text-[10px] font-bold bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors mb-1.5"
+                  className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-indigo-600 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
                 >
-                  <Terminal className="w-3 h-3" /> Query Table
+                  <Terminal className="w-3.5 h-3.5" /> Start Query
                 </button>
               </div>
 
+              {/* Tabs */}
+              <div className="flex items-center px-8 border-b border-slate-100 bg-white/50">
+                {([
+                  { id: "schemas" as const, label: "Structural Columns", icon: Layers },
+                  { id: "indexes" as const, label: "Index Registry", icon: Key },
+                  { id: "data" as const, label: "Data Stream", icon: FileJson2 },
+                ]).map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id)}
+                    className={clsx(
+                      "flex items-center gap-3 px-6 py-4 text-[9px] font-black uppercase tracking-widest border-b-2 transition-all relative",
+                      activeTab === t.id
+                        ? "border-indigo-500 text-indigo-600 bg-indigo-50/50"
+                        : "border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                    )}
+                  >
+                    <t.icon className={clsx("w-3.5 h-3.5", activeTab === t.id ? "text-indigo-600" : "text-slate-300")} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Tab Content */}
-              <div className="flex-1 overflow-auto">
+              <div className="flex-1 overflow-auto custom-scrollbar">
                 {activeTab === "schemas" && schema?.columns && (
-                  <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-gray-50 text-slate-400 border-b border-gray-200 sticky top-0">
+                  <table className="w-full text-left text-[10px] whitespace-nowrap">
+                    <thead className="bg-slate-50/80 text-slate-400 border-b border-slate-100 sticky top-0 z-10">
                       <tr>
-                        <th className="px-5 py-3 font-semibold">#</th>
-                        <th className="px-5 py-3 font-semibold">Field</th>
-                        <th className="px-5 py-3 font-semibold">Type</th>
-                        <th className="px-5 py-3 font-semibold">Null</th>
-                        <th className="px-5 py-3 font-semibold">Key</th>
-                        <th className="px-5 py-3 font-semibold">Default</th>
-                        <th className="px-5 py-3 font-semibold">Extra</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Index</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Field Attribute</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Type Protocol</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Nullability</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Constraint</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Default</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {schema.columns.map((col: any, i: number) => (
-                        <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                          <td className="px-5 py-2.5 text-slate-400 font-mono">{i + 1}</td>
-                          <td className="px-5 py-2.5 font-mono font-semibold text-teal-600">{formatZeroJson(col.Field.replace(/_/g, " "))}</td>
-                          <td className="px-5 py-2.5 text-slate-600 font-mono">{col.Type}</td>
-                          <td className="px-5 py-2.5"><span className={col.Null === "YES" ? "text-amber-500" : "text-slate-400"}>{col.Null}</span></td>
-                          <td className="px-5 py-2.5">
-                            {col.Key && <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded-md border ${
-                              col.Key === "PRI" ? "bg-rose-50 text-rose-600 border-rose-200" : col.Key === "UNI" ? "bg-blue-50 text-blue-600 border-blue-200" : "bg-gray-50 text-gray-600 border-gray-200"
-                            }`}>{col.Key}</span>}
+                        <tr key={i} className="hover:bg-indigo-50/30 transition-colors group/row">
+                          <td className="px-6 py-3 text-slate-400 font-mono text-[9px]">{i + 1}</td>
+                          <td className="px-6 py-3 font-black text-slate-700 uppercase tracking-tight">{formatZeroJson(col.Field.replace(/_/g, " "))}</td>
+                          <td className="px-6 py-3 text-indigo-600 font-mono font-bold">{col.Type}</td>
+                          <td className="px-6 py-3">
+                            <span className={clsx(
+                              "px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border",
+                              col.Null === "YES" ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-50 text-slate-400 border-slate-100"
+                            )}>
+                              {col.Null === "YES" ? "Nullable" : "Required"}
+                            </span>
                           </td>
-                          <td className="px-5 py-2.5 text-slate-400 font-mono">{col.Default ?? "None"}</td>
-                          <td className="px-5 py-2.5 text-slate-400 font-mono">{col.Extra || "—"}</td>
+                          <td className="px-6 py-3">
+                            {col.Key && (
+                              <span className={clsx(
+                                "px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border",
+                                col.Key === "PRI" ? "bg-rose-50 text-rose-600 border-rose-200" : "bg-blue-50 text-blue-600 border-blue-200"
+                              )}>
+                                {col.Key === "PRI" ? "Primary Key" : col.Key}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-3 text-slate-400 font-mono">{col.Default ?? "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -331,26 +425,37 @@ export default function SuperadminDatabaseExplorer() {
                 )}
 
                 {activeTab === "indexes" && schema?.indexes && (
-                  <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-gray-50 text-slate-400 border-b border-gray-200 sticky top-0">
+                  <table className="w-full text-left text-[10px] whitespace-nowrap">
+                    <thead className="bg-slate-50/80 text-slate-400 border-b border-slate-100 sticky top-0 z-10">
                       <tr>
-                        <th className="px-5 py-3 font-semibold">Key Name</th>
-                        <th className="px-5 py-3 font-semibold">Column</th>
-                        <th className="px-5 py-3 font-semibold">Unique</th>
-                        <th className="px-5 py-3 font-semibold">Seq</th>
-                        <th className="px-5 py-3 font-semibold">Cardinality</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Identifier</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Member Attribute</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Uniqueness</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Sequence</th>
+                        <th className="px-6 py-3 font-black uppercase tracking-widest">Cardinality</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {schema.indexes.length === 0 ? (
-                        <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">No indexes on this table.</td></tr>
+                        <tr>
+                          <td colSpan={5} className="px-6 py-16 text-center text-slate-400 font-black uppercase tracking-widest italic opacity-50">
+                            Zero Index Nodes Registered
+                          </td>
+                        </tr>
                       ) : schema.indexes.map((idx: any, i: number) => (
-                        <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                          <td className="px-5 py-2.5 font-mono font-semibold text-blue-600">{formatZeroJson(idx.Key_name.replace(/_/g, " "))}</td>
-                          <td className="px-5 py-2.5 font-mono text-slate-600">{formatZeroJson(idx.Column_name?.replace(/_/g, " "))}</td>
-                          <td className="px-5 py-2.5"><span className={idx.Non_unique === 0 ? "text-emerald-500" : "text-slate-400"}>{idx.Non_unique === 0 ? "Yes" : "No"}</span></td>
-                          <td className="px-5 py-2.5 text-slate-400">{idx.Seq_in_index}</td>
-                          <td className="px-5 py-2.5 text-slate-500 font-mono">{idx.Cardinality ?? "—"}</td>
+                        <tr key={i} className="hover:bg-indigo-50/30 transition-colors">
+                          <td className="px-6 py-3 font-black text-indigo-600 uppercase tracking-tight">{formatZeroJson(idx.Key_name.replace(/_/g, " "))}</td>
+                          <td className="px-6 py-3 font-mono text-slate-600">{formatZeroJson(idx.Column_name?.replace(/_/g, " "))}</td>
+                          <td className="px-6 py-3">
+                            <span className={clsx(
+                              "px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border",
+                              idx.Non_unique === 0 ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-slate-50 text-slate-400 border-slate-100"
+                            )}>
+                              {idx.Non_unique === 0 ? "Unique" : "Standard"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 text-slate-400 font-mono">{idx.Seq_in_index}</td>
+                          <td className="px-6 py-3 text-slate-500 font-mono">{idx.Cardinality ?? "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -359,17 +464,20 @@ export default function SuperadminDatabaseExplorer() {
 
                 {activeTab === "data" && (
                   tableData.length === 0 ? (
-                    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No data in this table.</div>
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+                      <Layers className="w-10 h-10 opacity-10" />
+                      <p className="text-[10px] font-black uppercase tracking-widest italic">Void Sequence • 0 records returned</p>
+                    </div>
                   ) : (
-                    <table className="w-full text-left text-xs whitespace-nowrap font-mono">
-                      <thead className="bg-gray-50 text-slate-400 border-b border-gray-200 sticky top-0">
-                        <tr>{Object.keys(tableData[0]).map(k => <th key={k} className="px-4 py-3 font-semibold">{k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</th>)}</tr>
+                    <table className="w-full text-left text-[9px] whitespace-nowrap font-mono">
+                      <thead className="bg-slate-50/80 text-slate-400 border-b border-slate-100 sticky top-0 z-10">
+                        <tr>{Object.keys(tableData[0]).map(k => <th key={k} className="px-6 py-3 font-black uppercase tracking-widest">{k}</th>)}</tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-slate-100">
                         {tableData.map((row, i) => (
-                          <tr key={i} className="hover:bg-blue-50/30 transition-colors text-slate-600">
+                          <tr key={i} className="hover:bg-indigo-50/30 transition-colors text-slate-600">
                             {Object.values(row).map((val: any, j) => (
-                              <td key={j} className="px-4 py-2 truncate max-w-[200px]">{val === null ? <span className="text-gray-300 italic">None</span> : formatZeroJson(val)}</td>
+                              <td key={j} className="px-6 py-2.5 truncate max-w-[250px]">{val === null ? <span className="text-slate-300 italic">NULL</span> : formatZeroJson(val)}</td>
                             ))}
                           </tr>
                         ))}
@@ -382,6 +490,16 @@ export default function SuperadminDatabaseExplorer() {
           )}
         </div>
       </div>
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        
+        .custom-scrollbar-dark::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar-dark::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .custom-scrollbar-dark::-webkit-scrollbar-track { background: transparent; }
+      `}</style>
     </div>
   );
 }

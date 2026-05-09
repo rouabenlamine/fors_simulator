@@ -80,55 +80,55 @@ export default function LoginPage() {
           fill
           priority
           unoptimized
-          className="object-contain"
+          className="object-cover"
         />
       </div>
 
       {/* 2. ALIGNED LOGOS & BRANDING LOCKUP */}
-      <div className="relative z-20 flex items-center justify-center gap-6 md:gap-12 mb-8 mt-4 w-full">
+      <div className="relative z-20 flex items-center justify-center gap-6 md:gap-12 mb-4 mt-2 w-full">
         {/* IT Hub Logo (Color Restored, Size Matched) */}
         <Image
           src="/it_hub_tunisia.png"
           alt="LEONI IT HUB Tunisia"
-          width={170}
-          height={120}
+          width={130}
+          height={90}
           unoptimized
-          className="h-10 md:h-[120px] w-auto object-contain"
+          className="h-8 md:h-[90px] w-auto object-contain"
         />
 
         {/* Divider (Optional visual separation, transparent) */}
-        <div className="h-8 border-l border-white/20 hidden md:block"></div>
+        <div className="h-6 border-l border-white/20 hidden md:block"></div>
 
 
         {/* LEONI Word (Size Matched) */}
-        <h1 className="text-3xl md:text-[42px] leading-none font-black text-white tracking-tighter select-none flex items-center h-10 md:h-[48px]">
+        <h1 className="text-2xl md:text-[32px] leading-none font-black text-white tracking-tighter select-none flex items-center h-8 md:h-[38px]">
           LEONI
         </h1>
 
 
 
         {/* Divider */}
-        <div className="h-8 border-l border-white/20 hidden md:block"></div>
+        <div className="h-6 border-l border-white/20 hidden md:block"></div>
         {/* FORS Abstract Logo (Size Matched) */}
         <Image
           src="/fors_abstract.jpg.png"
           alt="FORS Logo"
-          width={100}
-          height={100}
+          width={80}
+          height={80}
           unoptimized
-          className="h-10 md:h-[100px] w-auto object-contain rounded-xl "
+          className="h-8 md:h-[80px] w-auto object-contain rounded-xl "
         />
       </div>
 
 
       {/* 3. CENTERED LOGOTYPE */}
-      <div className="relative z-10 flex flex-col items-center mb-8 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <h2 className="text-white text-xl font-italic uppercase tracking-[0.3em] mb-2 opacity-80">
+      <div className="relative z-10 flex flex-col items-center mb-4 text-center">
+        <div className="flex flex-col items-center gap-1">
+          <h2 className="text-white text-lg font-italic uppercase tracking-[0.3em] mb-1 opacity-80">
             FORS Simulator
           </h2>
-          <div className="flex flex-wrap items-center justify-center gap-3 text-2xl md:text-3xl font-bold text-white">
-            <span className="bg-[#F26522] px-5 py-3 rounded-full">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xl md:text-2xl font-bold text-white">
+            <span className="bg-[#F26522] px-4 py-2 rounded-full">
               Empowering
             </span>
             <span className="tracking-tight"> connections.</span>
@@ -137,7 +137,7 @@ export default function LoginPage() {
       </div>
 
       {/* 5. LOGIN CARD */}
-      <div className="w-full max-w-[440px] bg-white rounded-[2.5rem] shadow-2xl overflow-hidden relative z-10 border border-white/20">
+      <div className="w-full max-w-[420px] bg-white rounded-[2rem] shadow-2xl overflow-hidden relative z-10 border border-white/20">
 
         {/* Role Selector Tabs */}
         <div className="flex p-1.5 bg-slate-50/50">
@@ -152,20 +152,20 @@ export default function LoginPage() {
                   setSelectedRole(tab.id as UserRole);
                   setError("");
                 }}
-                className={`flex-1 flex flex-col items-center justify-center py-4 rounded-3xl transition-all duration-300 ${isActive
+                className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-2xl transition-all duration-300 ${isActive
                   ? "bg-white text-[#001e3d] shadow-md border-b-2 border-[#F26522]"
                   : "text-slate-400 hover:text-slate-500"
                   }`}
               >
-                <Icon className={`w-5 h-5 mb-1 ${isActive ? "text-[#F26522]" : "text-slate-300"}`} />
-                <span className="text-[10px] font-bold uppercase tracking-wider">{tab.label}</span>
+                <Icon className={`w-4 h-4 mb-1 ${isActive ? "text-[#F26522]" : "text-slate-300"}`} />
+                <span className="text-[9px] font-bold uppercase tracking-wider">{tab.label}</span>
               </button>
             );
           })}
         </div>
 
-        <div className="p-8 md:p-10">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="p-6 md:p-8">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
                 User Matricule
@@ -224,7 +224,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <p className="mt-10 text-white/20 text-[9px] font-medium uppercase tracking-[0.5em] select-none">
+      <p className="mt-4 text-white/20 text-[9px] font-medium uppercase tracking-[0.5em] select-none">
         FORS MODULE &bull; LEONI GROUP &bull; 2026
       </p>
     </div>

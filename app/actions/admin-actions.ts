@@ -12,7 +12,7 @@ import { revalidatePath } from "next/cache";
 async function requireAdmin() {
   const session = await getSession();
   const role = session.user?.role as string;
-  if (!["admin", "superadmin", "it_manager"].includes(role)) throw new Error("Unauthorized.");
+  if (!["admin", "superadmin", "it_manager", "it_report"].includes(role)) throw new Error("Unauthorized.");
   return session;
 }
 
@@ -35,7 +35,7 @@ export async function getAdminUsersAction() {
   const session = await requireAdmin();
   const callerRole = session.user!.role;
 
-  let queryStr = "SELECT matricule, name, prenom, username, email, role, is_active, created_at FROM users";
+  let queryStr = "SELECT matricule, name, surname, username, email, role, is_active, created_at FROM users";
   const params: any[] = [];
 
   // SuperAdmin sees full directory. Admin sees only lower roles.
@@ -52,7 +52,7 @@ export async function getAdminUsersAction() {
 }
 
 export async function createUserAction(data: {
-  matricule: string; name: string; prenom: string; username?: string;
+  matricule: string; name: string; surname: string; username?: string;
   email?: string; password: string; role: string;
 }) {
   const session = await requireAdmin();
@@ -73,9 +73,9 @@ export async function createUserAction(data: {
   const hash = bcrypt.hashSync(data.password, 10);
 
   await execute(
-    `INSERT INTO users (matricule, name, prenom, username, email, password, role, is_active, created_at)
+    `INSERT INTO users (matricule, name, surname, username, email, password, role, is_active, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())`,
-    [data.matricule, data.name, data.prenom, data.username || null, data.email || null, hash, data.role]
+    [data.matricule, data.name, data.surname, data.username || null, data.email || null, hash, data.role]
   );
 
   await logActivity("USER_CREATED", {
@@ -89,7 +89,7 @@ export async function createUserAction(data: {
 }
 
 export async function updateUserAction(matricule: string, data: {
-  name?: string; prenom?: string; username?: string; email?: string; role?: string; password?: string;
+  name?: string; surname?: string; username?: string; email?: string; role?: string; password?: string;
 }) {
   const session = await requireAdmin();
   const caller = session.user!;
@@ -122,7 +122,7 @@ export async function updateUserAction(matricule: string, data: {
   const params: any[] = [];
 
   if (data.name !== undefined)     { sets.push("name = ?");     params.push(data.name); }
-  if (data.prenom !== undefined)   { sets.push("prenom = ?");   params.push(data.prenom); }
+  if (data.surname !== undefined)  { sets.push("surname = ?");  params.push(data.surname); }
   if (data.username !== undefined) { sets.push("username = ?"); params.push(data.username); }
   if (data.email !== undefined)    { sets.push("email = ?");    params.push(data.email); }
   if (data.role !== undefined)     { sets.push("role = ?");     params.push(data.role); }
@@ -549,7 +549,7 @@ export async function executeRawSqlAction(sqlQuery: string) {
 export async function getAdminsList() {
   await requireSuperadmin();
   const rows = await query<any>(
-    "SELECT matricule, name, prenom, role, is_active, email, created_at FROM users WHERE role IN ('admin', 'superadmin') ORDER BY created_at DESC"
+    "SELECT matricule, name, surname, role, is_active, email, created_at FROM users WHERE role IN ('admin', 'superadmin') ORDER BY created_at DESC"
   );
   return JSON.parse(JSON.stringify(rows));
 }
@@ -830,7 +830,7 @@ export async function getTeamMembersAction() {
     }
 
     const rows = await query<any>(
-      `SELECT matricule, name, prenom, role, is_active, email, created_at FROM users ${whereClause} ORDER BY created_at DESC`
+      `SELECT matricule, name, surname, role, is_active, email, created_at FROM users ${whereClause} ORDER BY created_at DESC`
     );
     return JSON.parse(JSON.stringify(rows));
   } catch {
@@ -900,12 +900,20 @@ export async function getReportKpisAction() {
       SELECT COUNT(*) as c FROM users ${role === 'it_manager' ? "WHERE role = 'it_support'" : ""}
     `);
 
-    // Active sessions
-    const [sessionsRes] = await query<any>(`
-      SELECT COUNT(*) as c FROM sessions s
-      JOIN users u ON u.matricule = s.user_matricule
-      WHERE expires_at > NOW() ${role === 'it_manager' ? "AND u.role = 'it_support'" : ""}
+    // Agent performance (top 10)
+    const agentPerformance = await query<any>(`
+      SELECT 
+        assigned_to as agent, 
+        COUNT(*) as total,
+        SUM(CASE WHEN state IN ('Closed', 'Validated') THEN 1 ELSE 0 END) as resolved
+      FROM tickets 
+      ${groupFilter ? groupFilter + " AND" : "WHERE"} assigned_to IS NOT NULL
+      GROUP BY assigned_to 
+      ORDER BY total DESC 
+      LIMIT 10
     `);
+    // Sessions count
+    const [sessionsRes] = await query<any>("SELECT COUNT(*) as c FROM sessions WHERE expires_at > NOW()");
 
     return JSON.parse(JSON.stringify({
       totalTickets: totalRes?.c || 0,
@@ -919,6 +927,7 @@ export async function getReportKpisAction() {
       priorityDistribution: priorityRows,
       teamDistribution: teamRows,
       monthlyTrend: monthlyRows,
+      agentPerformance: agentPerformance,
       aiAnalysisCount: aiAnalysisRes?.c || 0,
       avgAiConfidence: avgConfRes?.avg_conf ? Math.round(avgConfRes.avg_conf * 100) : 0,
       totalUsers: usersRes?.c || 0,
@@ -928,4 +937,40 @@ export async function getReportKpisAction() {
     console.error("getReportKpisAction failed:", err);
     return null;
   }
+}
+
+// ───────────────────────────────────────────────
+//  REPORTING & AUDIT
+// ───────────────────────────────────────────────
+
+export async function logReportGenerationAction(data: { name: string; description: string; theme: string; config: any }) {
+  await requireAdmin();
+  const session = await getSession();
+  
+  await logActivity("REPORT_GENERATED", {
+    userMatricule: session.user!.matricule,
+    details: {
+      reportName: data.name,
+      reportDescription: data.description,
+      reportTheme: data.theme,
+      reportConfig: data.config,
+      generatedAt: new Date().toISOString()
+    }
+  });
+
+  return { success: true };
+}
+
+export async function getReportHistoryAction() {
+  await requireAdmin();
+  const rows = await query<any>(
+    "SELECT id, user_matricule, details, created_at FROM audit_logs WHERE action = 'REPORT_GENERATED' ORDER BY created_at DESC LIMIT 20"
+  );
+  
+  return rows.map(r => ({
+    id: r.id,
+    userMatricule: r.user_matricule,
+    created_at: r.created_at,
+    ...JSON.parse(r.details || '{}')
+  }));
 }

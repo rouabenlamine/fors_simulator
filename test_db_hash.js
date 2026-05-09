@@ -24,7 +24,7 @@ async function testLogin(matricule, password) {
   });
 
   const [users] = await pool.query(
-    "SELECT matricule, name, prenom, role, password FROM users WHERE matricule = ?",
+    "SELECT matricule, name, surname, role, password FROM users WHERE matricule = ?",
     [matricule]
   );
   

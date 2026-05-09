@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import clsx from "clsx";
 import {
   Settings2, Save, Loader2, Check, Eye, EyeOff, Shield, Info,
   Ticket, MessageSquare, BarChart3, Activity, Database, FileText,
@@ -109,12 +110,17 @@ function MiniSidebar({ nav, permissions, role, accentColor }: {
 
   return (
     <div className="bg-[#0B1120] rounded-xl overflow-hidden shadow-lg border border-white/5 w-full">
-      {/* Mini brand bar */}
-      <div className="px-3 py-2.5 border-b border-white/5 flex items-center gap-2">
-        <div className={`w-5 h-5 ${accentColor} rounded-md flex items-center justify-center`}>
-          <Cpu className="w-3 h-3 text-white" />
+      {/* Mini brand bar - Updated to match current branding */}
+      <div className="px-3 py-3 border-b border-white/5 flex items-center gap-2">
+        <img
+          src="/purpleFors.png"
+          alt="FORS"
+          className="w-5 h-5 object-contain rounded-md shadow-lg shadow-indigo-950/20"
+        />
+        <div className="flex flex-col">
+          <span className="text-[9px] font-black text-white leading-none tracking-tight">FORS <span className="text-indigo-400">Simulator</span></span>
+          <span className="text-[6px] font-bold text-white/30 uppercase tracking-widest mt-0.5">Enterprise</span>
         </div>
-        <span className="text-[10px] font-bold text-white uppercase tracking-wide">LEONI</span>
       </div>
 
       {/* Nav items */}
@@ -128,8 +134,8 @@ function MiniSidebar({ nav, permissions, role, accentColor }: {
             <div key={label}>
               <div
                 className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer transition-all ${isHidden
-                    ? "text-slate-600 line-through opacity-40"
-                    : "text-slate-300 hover:bg-white/5"
+                  ? "text-slate-600 line-through opacity-40"
+                  : "text-slate-300 hover:bg-white/5"
                   }`}
                 onClick={() => sub && setOpenSub(openSub === label ? null : label)}
                 title={isHidden ? `Hidden — "${label}" is toggled off` : description}
@@ -240,7 +246,7 @@ export default function ViewControlPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
       </div>
     );
   }
@@ -248,52 +254,56 @@ export default function ViewControlPage() {
   const meta = ROLE_LABELS[activeRole];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5 py-4 px-2">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="max-w-4xl mx-auto space-y-3 py-4 px-6">
+
+      {/* Minimalist Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-200">
-            <Settings2 className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-100 shrink-0">
+            <ShieldCheck className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">View Permissions</h1>
-            <p className="text-sm text-slate-500">Control exactly what each role sees in their dashboard.</p>
+            <h1 className="text-sm font-black text-slate-800 tracking-tight leading-none">
+              View <span className="text-indigo-500">Permissions</span>
+            </h1>
+            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">RBAC UI Control & View Permissions</p>
           </div>
         </div>
       </div>
 
       {/* Info banner */}
-      <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-        <Info className="w-4 h-4 text-blue-500 shrink-0" />
-        <p className="text-xs text-blue-700">
-          The <strong>Dashboard Preview</strong> on the left reflects live changes.
+      <div className="flex items-center gap-4 bg-indigo-50/50 backdrop-blur-sm border border-indigo-100 rounded-2xl px-6 py-4">
+        <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center shrink-0">
+          <Info className="w-4 h-4 text-indigo-600" />
+        </div>
+        <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
+          The <strong>Dashboard Preview</strong> reflects live visibility changes for the selected role.
         </p>
       </div>
 
       {/* Superadmin fixed preview — ONLY for Superadmin caller */}
       {myRole === "superadmin" && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-200">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-800 rounded-lg flex items-center justify-center">
-                <Shield className="w-4 h-4 text-white" />
+        <div className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-800">
+          <div className="flex items-center justify-between px-8 py-5 bg-white/5 border-b border-white/5">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl flex items-center justify-center border border-white/10 shadow-lg">
+                <Shield className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="font-bold text-slate-800">Superadmin</h2>
-                <p className="text-[11px] text-slate-400">Full access — all permissions locked on</p>
+                <h2 className="text-sm font-black text-white uppercase tracking-widest">Superadmin Matrix</h2>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Global Root Access • Locked Protocols</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">Read-only</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/5 px-4 py-1.5 rounded-full border border-white/10">immutable_state</span>
           </div>
-          <div className="p-5">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
+          <div className="p-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
               {SUPERADMIN_PREVIEW.map(({ label, icon: Icon, description }) => (
-                <div key={label} className="flex flex-col items-center gap-1.5 p-3 bg-slate-50 border border-slate-100 rounded-xl text-center">
-                  <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center">
-                    <Icon className="w-4 h-4 text-slate-300" />
+                <div key={label} className="flex flex-col items-center gap-2 p-4 bg-white/5 border border-white/5 rounded-2xl text-center group hover:bg-white/10 transition-all">
+                  <div className="w-9 h-9 bg-slate-800 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Icon className="w-4 h-4 text-indigo-400" />
                   </div>
-                  <span className="text-[10px] font-semibold text-slate-700 leading-tight">{label}</span>
-                  <span className="text-[9px] text-slate-400 leading-tight hidden sm:block">{description}</span>
+                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-tight">{label}</span>
                 </div>
               ))}
             </div>
@@ -301,18 +311,20 @@ export default function ViewControlPage() {
         </div>
       )}
 
-      {/* Role Tabs */}
-      <div className="flex gap-2 flex-wrap">
+      {/* Role selector tabs */}
+      <div className="flex flex-wrap items-center gap-2 px-2">
         {Object.entries(ROLE_LABELS).filter(([role]) => permissions[role]).map(([role, m]) => (
           <button
             key={role}
             onClick={() => setActiveRole(role)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${activeRole === role
-                ? `${m.bg} ${m.border} ${m.color} shadow-sm`
-                : "bg-white border-gray-200 text-slate-500 hover:bg-gray-50"
-              }`}
+            className={clsx(
+              "flex items-center gap-2.5 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border",
+              activeRole === role
+                ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100"
+                : "bg-white text-slate-400 border-slate-100 hover:text-slate-600 hover:border-slate-200"
+            )}
           >
-            <div className={`w-2 h-2 rounded-full ${activeRole === role ? m.dotColor : "bg-gray-300"}`} />
+            <div className={clsx("w-1.5 h-1.5 rounded-full", activeRole === role ? "bg-white animate-pulse" : "bg-slate-200")} />
             {m.label}
           </button>
         ))}
@@ -320,79 +332,84 @@ export default function ViewControlPage() {
 
       {/* Active role editor */}
       {meta && permissions[activeRole] && (
-        <div className={`bg-white border ${meta.border} rounded-2xl shadow-sm overflow-hidden`}>
+        <div key={activeRole} className="bg-white/40 backdrop-blur-3xl border border-white/80 rounded-[2.5rem] shadow-sm overflow-hidden">
           {/* Role header */}
-          <div className={`flex items-center justify-between px-6 py-4 ${meta.bg} border-b ${meta.border}`}>
+          <div className="flex items-center justify-between px-6 py-4 bg-indigo-50/20 border-b border-indigo-100/30">
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 ${meta.iconBg} rounded-lg flex items-center justify-center`}>
-                <Shield className={`w-4 h-4 ${meta.color}`} />
+              <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center shadow-sm", meta.iconBg)}>
+                <Shield className={clsx("w-3.5 h-3.5", meta.color)} />
               </div>
               <div>
-                <h2 className={`font-bold ${meta.color}`}>{meta.label}</h2>
-                <p className="text-[11px] text-slate-500">
-                  {enabledCount}/{totalComponents} components enabled
+                <h2 className={clsx("text-[13px] font-black uppercase tracking-tight", meta.color)}>{meta.label}</h2>
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mt-0.5">
+                  {enabledCount}/{totalComponents} Modules Active
                 </p>
               </div>
             </div>
             <button
               onClick={() => saveRole(activeRole)}
               disabled={saving === activeRole}
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all shadow-sm ${saved === activeRole
-                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+              className={clsx(
+                "flex items-center gap-2 px-5 py-2.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95",
+                saved === activeRole
+                  ? "bg-emerald-500 text-white shadow-emerald-100"
                   : saving === activeRole
-                    ? "bg-gray-100 text-gray-400 border border-gray-200"
-                    : "bg-white text-slate-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"
-                } disabled:cursor-not-allowed`}
+                    ? "bg-violet-200 text-violet-400 cursor-not-allowed"
+                    : "bg-violet-600 text-white hover:bg-violet-400"
+              )}
             >
-              {saving === activeRole ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved === activeRole ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Save className="w-3.5 h-3.5" />}
-              {saving === activeRole ? "Saving..." : saved === activeRole ? "Saved!" : "Save Changes"}
+              {saving === activeRole ? <Loader2 className="w-3 h-3 animate-spin" /> : saved === activeRole ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
+              {saving === activeRole ? "Syncing..." : saved === activeRole ? "Deployed!" : "Apply Changes"}
             </button>
           </div>
 
           {/* Two-column layout: preview + controls */}
-          <div className="flex flex-col lg:flex-row gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-100">
+          <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
 
             {/* LEFT: Dashboard preview */}
-            <div className="lg:w-56 xl:w-64 shrink-0 p-5 bg-gray-50/50">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Dashboard Preview</p>
-              <MiniSidebar
-                nav={ROLE_DASHBOARD_NAV[activeRole] || []}
-                permissions={permissions[activeRole]}
-                role={activeRole}
-                accentColor={meta.accent}
-              />
-              <p className="text-[10px] text-slate-400 mt-3 leading-relaxed">
-                Items with a <Lock className="w-2.5 h-2.5 inline" /> icon are hidden from this role.
-              </p>
+            <div className="lg:w-56 xl:w-60 shrink-0 p-4 bg-slate-50/30">
+              <p className="text-[7px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 ml-1">Live Dashboard Interface</p>
+              <div className="scale-[0.8] origin-top">
+                <MiniSidebar
+                  nav={ROLE_DASHBOARD_NAV[activeRole] || []}
+                  permissions={permissions[activeRole]}
+                  role={activeRole}
+                  accentColor={meta.accent}
+                />
+              </div>
+              <div className="mt-4 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
+                <p className="text-[9px] font-bold text-indigo-600 leading-relaxed flex items-start gap-2">
+                  <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  Locked modules are automatically purged from the user&apos;s navigation and routing protocols.
+                </p>
+              </div>
             </div>
 
             {/* RIGHT: Toggle controls */}
-            <div className="flex-1 p-5 space-y-5">
+            <div className="flex-1 p-4 space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar">
               {categories.map(cat => {
                 const comps = VIEW_COMPONENTS.filter(c => c.category === cat);
                 const roleNavIds = (ROLE_DASHBOARD_NAV[activeRole] || []).map(n => n.componentId).filter(Boolean);
 
-                // FILTER: Only show relevant components
                 const isSystemAdmin = activeRole === "admin";
                 const relevantComps = comps.filter(comp => {
-                  if (roleNavIds.includes(comp.id)) return true; // in their nav
-                  if (cat === "Header") return true; // global header items
-                  if (cat === "System" && isSystemAdmin) return true; // admin-only items
-                  if (cat === "Dashboard" || cat === "Management" || cat === "Data") return true; // general dashboard features
+                  if (roleNavIds.includes(comp.id)) return true;
+                  if (cat === "Header") return true;
+                  if (cat === "System" && isSystemAdmin) return true;
+                  if (cat === "Dashboard" || cat === "Management" || cat === "Data") return true;
                   return false;
                 });
 
                 if (relevantComps.length === 0) return null;
 
                 return (
-                  <div key={cat} className="animate-in fade-in slide-in-from-top-1 duration-300">
-                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5 px-1">{cat}</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                  <div key={`${activeRole}-${cat}`}>
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">{cat} Modules</h3>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                       {relevantComps.map(comp => {
                         const enabled = permissions[activeRole]?.[comp.id as keyof RolePermissions] !== false;
                         const isInNav = roleNavIds.includes(comp.id);
 
-                        // Role-specific label override
                         let displayLabel = comp.label;
                         if (comp.id === "user_management" && activeRole === "it_manager") {
                           displayLabel = "Team Management";
@@ -401,31 +418,37 @@ export default function ViewControlPage() {
                           <button
                             key={comp.id}
                             onClick={() => toggle(activeRole, comp.id)}
-                            className={`group flex items-center gap-3 px-3.5 py-3 rounded-xl border text-left transition-all duration-200 ${enabled
-                                ? "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-sm"
-                                : "bg-gray-50 border-gray-100 opacity-60 hover:opacity-80 hover:bg-gray-100"
-                              }`}
+                            className={clsx(
+                              "group flex items-center gap-3 px-4 py-3 rounded-[1.2rem] border text-left transition-all duration-300",
+                              enabled
+                                ? "bg-white border-slate-200 hover:border-indigo-400 hover:shadow-md hover:shadow-indigo-50"
+                                : "bg-slate-50 border-slate-100 opacity-60 hover:opacity-100"
+                            )}
                           >
-                            {/* Toggle */}
-                            <div className={`w-8 h-5 rounded-full flex items-center p-0.5 transition-all duration-300 shrink-0 ${enabled ? "bg-emerald-500 justify-end" : "bg-gray-300 justify-start"
-                              }`}>
-                              <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
+                            <div className={clsx(
+                              "w-8 h-5 rounded-full flex items-center p-0.5 transition-all duration-500 shrink-0",
+                              enabled ? "bg-emerald-500" : "bg-slate-200"
+                            )}>
+                              <div className={clsx(
+                                "w-3.5 h-3.5 rounded-full bg-white shadow-sm transform transition-transform duration-500",
+                                enabled ? "translate-x-3" : "translate-x-0"
+                              )} />
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <p className={`text-xs font-semibold truncate ${enabled ? "text-slate-800" : "text-slate-400"}`}>
+                              <div className="flex items-center gap-2">
+                                <p className={clsx("text-[10px] font-black uppercase tracking-tight truncate", enabled ? "text-slate-800" : "text-slate-400")}>
                                   {displayLabel}
                                 </p>
                                 {!isInNav && (
-                                  <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 px-1 rounded shrink-0">global</span>
+                                  <span className="text-[8px] font-black uppercase tracking-widest text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 shrink-0">global</span>
                                 )}
                               </div>
-                              <p className="text-[10px] text-slate-400 truncate leading-relaxed">{comp.description}</p>
+                              <p className="text-[8px] font-bold text-slate-400 truncate mt-0.5">{comp.description}</p>
                             </div>
 
-                            <div className={`shrink-0 transition-colors ${enabled ? "text-emerald-500" : "text-gray-300"}`}>
-                              {enabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                            <div className={clsx("shrink-0 transition-all", enabled ? "text-indigo-500" : "text-slate-300")}>
+                              {enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                             </div>
                           </button>
                         );
@@ -438,6 +461,12 @@ export default function ViewControlPage() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      `}</style>
     </div>
   );
 }

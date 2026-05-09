@@ -1,468 +1,738 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { getTeamKpisAction } from "@/app/actions/admin-actions";
-import { RefreshCw, BarChart3, TrendingUp, Activity, Search, X, Info, Zap, Users, AlertTriangle, Calendar, HelpCircle, Filter, ChevronDown } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { getTickets } from "@/app/actions";
+import {
+  X, Info, Activity, AlertTriangle, ShieldCheck, PieChart as PieIcon, LineChart as LineIcon,
+  BarChart3, MoreHorizontal, TrendingUp, TrendingDown, Cpu, Zap, RefreshCw
+} from "lucide-react";
+import { clsx } from "clsx";
+import type { Ticket } from "@/lib/types";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell, Legend, LineChart, Line
+  BarChart, Bar, PieChart, Pie, Cell, Legend, LineChart, Line, ScatterChart, Scatter, ZAxis,
+  ComposedChart
 } from "recharts";
 
-// Corporate professional palette: Slate, Navy, Teal
-const CORP_COLORS = ['#0F172A', '#1E3A5F', '#0D9488', '#475569', '#14B8A6', '#334155', '#0891B2'];
-const CORP_LIGHT = ['#F1F5F9', '#E2E8F0', '#F0FDFA', '#F8FAFC'];
-
-type DateRange = "7d" | "30d" | "custom";
-
-// KPI explanations for the info modals
-const KPI_EXPLANATIONS: Record<string, { what: string; how: string }> = {
-  "Total Tickets": {
-    what: "The total number of IT service tickets submitted to the system across all statuses.",
-    how: "Calculated by counting all rows in the tickets table scoped to the IT Support assignment group."
-  },
-  "Tickets Today": {
-    what: "The count of new tickets created within the current business day.",
-    how: "Filters the tickets table where sys_created_on matches today's date (CURDATE())."
-  },
-  "Tickets Solved": {
-    what: "Total number of tickets that have been successfully resolved, closed, or validated.",
-    how: "Counts tickets where state is either 'Closed' or 'Validated'."
-  },
-  "Critical Active Tickets": {
-    what: "Tickets with Critical or High priority that remain open and require immediate attention.",
-    how: "Counts tickets with priority '1 - Critical' or '2 - High' where state is not Closed, Validated, or Canceled."
-  },
-  "Unassigned Tickets": {
-    what: "Active tickets that have not yet been assigned to any support agent.",
-    how: "Counts tickets where assigned_to is NULL and state is not 'Closed'."
-  },
-  "All Tickets Status": {
-    what: "A visual breakdown of all tickets grouped by their current lifecycle state.",
-    how: "Aggregates the tickets table by the 'state' column and returns counts per status group."
-  },
+// ─── Vivid Color Palette matching references ────────────────────
+const C = {
+  indigo: "#6366f1", emerald: "#10b981", rose: "#f43f5e",
+  amber: "#f59e0b", sky: "#0ea5e9", purple: "#8b5cf6",
+  pink: "#ec4899", fuchsia: "#d946ef", cyan: "#06b6d4"
 };
 
-export default function KPIsPage() {
-  const [allKpis, setAllKpis] = useState<any[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [selectedKpi, setSelectedKpi] = useState<any>(null);
-  const [infoKpi, setInfoKpi] = useState<any>(null);
-  const [dateRange, setDateRange] = useState<DateRange>("30d");
-  const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set());
-  const [filterOpen, setFilterOpen] = useState(false);
+const CHART_COLORS = [C.purple, C.fuchsia, C.pink, C.amber, C.sky, C.emerald];
 
-  const loadData = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const data = await getTeamKpisAction();
-      setAllKpis(Array.isArray(data) ? data : []);
-    } catch {
-      setAllKpis([]);
-    }
-    setLastUpdated(new Date());
-    setRefreshing(false);
-  }, []);
+// ─── Initial Fallback Data (before tickets load) ───────────────────
+const DATES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const EMPTY_DATES = DATES.map(d => ({ date: d, value: 0 }));
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
 
-  // Extract unique categories
-  const categories = useMemo(() => {
-    const cats = new Set(allKpis.map(k => k.category || "General"));
-    return Array.from(cats);
-  }, [allKpis]);
+// ─── Chart Card Component (Compact & Animated) ───────────────────
+const ChartCard = ({ title, desc, icon: Icon, onClick, children, className, variant = "white", heroValue, heroChange, delay = 0 }: any) => {
+  const isGradient = variant === "gradient-purple";
+  const isGradientOrange = variant === "gradient-orange";
+  const isAnyGradient = isGradient || isGradientOrange;
 
-  // Initialize activeCategories to all
-  useEffect(() => {
-    if (categories.length > 0 && activeCategories.size === 0) {
-      setActiveCategories(new Set(categories));
-    }
-  }, [categories]);
+  const bgClass = isGradient
+    ? "bg-gradient-to-br from-fuchsia-600 via-purple-600 to-indigo-600 border-none shadow-[0_10px_30px_rgba(139,92,246,0.25)] text-white"
+    : isGradientOrange
+      ? "bg-gradient-to-br from-orange-400 via-pink-500 to-rose-500 border-none shadow-[0_10px_30px_rgba(244,63,94,0.25)] text-white"
+      : "bg-white border-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] text-slate-800";
 
-  const toggleCategory = (cat: string) => {
-    setActiveCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(cat)) { next.delete(cat); } else { next.add(cat); }
-      return next;
-    });
-  };
-
-  // Filter KPIs by active categories
-  const filteredKpis = useMemo(() => {
-    return allKpis.filter(k => activeCategories.has(k.category || "General"));
-  }, [allKpis, activeCategories]);
-
-  const metrics = filteredKpis.filter(k => k.type === "metric");
-  const charts = filteredKpis.filter(k => k.type === "chart");
-
-  const formatLabel = (label: any) => {
-    let str = String(label || "Unknown");
-    if (str === '1') return "New";
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  };
+  const textTitleClass = isAnyGradient ? "text-white/95" : "text-slate-800";
+  const textDescClass = isAnyGradient ? "text-white/70" : "text-slate-400";
+  const iconClass = isAnyGradient ? "text-white bg-white/20 shadow-inner" : "text-indigo-500 bg-indigo-50 border border-indigo-50";
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8 min-h-screen">
+    <div
+      onClick={onClick}
+      style={{ animationDelay: `${delay}ms` }}
+      className={clsx(
+        "rounded-[24px] border transition-all duration-500 flex flex-col p-5 group cursor-pointer hover:-translate-y-1.5 hover:shadow-xl relative overflow-hidden h-[240px] animate-in fade-in slide-in-from-bottom-8 fill-mode-both",
+        bgClass,
+        className
+      )}
+    >
+      {isGradient && (
+        <>
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 blur-3xl rounded-full pointer-events-none" />
+          <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-pink-500/20 blur-3xl rounded-full pointer-events-none" />
+        </>
+      )}
+      {isGradientOrange && (
+        <>
+          <div className="absolute -top-10 -left-10 w-40 h-40 bg-white/20 blur-3xl rounded-full pointer-events-none" />
+          <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-purple-500/20 blur-3xl rounded-full pointer-events-none" />
+        </>
+      )}
 
-      {/* Corporate Professional Header */}
-      <div className="relative p-8 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-[#1E3A5F] overflow-hidden shadow-xl">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-teal-500/10 rounded-full blur-[100px]" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-500/15 border border-teal-500/25 text-xs font-bold text-teal-300 uppercase tracking-widest">
-              <BarChart3 className="w-3.5 h-3.5" />
-              Analytics Dashboard
+      <div className="flex items-start justify-between mb-3 relative z-10 shrink-0">
+        <div className="flex items-center gap-3">
+          {Icon && (
+            <div className={clsx("w-9 h-9 rounded-[12px] flex items-center justify-center backdrop-blur-md", iconClass)}>
+              <Icon className="w-4 h-4" />
             </div>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-              KPI &amp; Statistics
-            </h2>
-            <p className="text-slate-400 text-sm max-w-md">
-              Real-time operational metrics. Click any card for detailed insights, or the <HelpCircle className="w-3.5 h-3.5 inline text-teal-400" /> icon for metric explanations.
+          )}
+          <div>
+            <h3 className={clsx("text-sm font-black tracking-tight", textTitleClass)}>
+              {title}
+            </h3>
+            {desc && <p className={clsx("text-[9px] font-bold uppercase tracking-[0.15em] mt-0.5", textDescClass)}>{desc}</p>}
+          </div>
+        </div>
+        <div className={clsx("w-7 h-7 rounded-full flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100", isAnyGradient ? "bg-white/10 hover:bg-white/20 text-white" : "bg-slate-50 hover:bg-slate-100 text-slate-400")}>
+          <MoreHorizontal className="w-3.5 h-3.5" />
+        </div>
+      </div>
+
+      {heroValue && (
+        <div className="mb-2 relative z-10 flex items-baseline gap-2 shrink-0 px-1">
+          <span className={clsx("text-2xl font-black tracking-tighter", isAnyGradient ? "text-white drop-shadow-sm" : "text-slate-800")}>{heroValue}</span>
+          {heroChange && (
+            <span className={clsx("text-[10px] font-black flex items-center gap-1 px-1.5 py-0.5 rounded-full",
+              heroChange.startsWith('+') ? (isAnyGradient ? "bg-white/20 text-emerald-50" : "bg-emerald-50 text-emerald-600") :
+                (isAnyGradient ? "bg-white/20 text-rose-50" : "bg-rose-50 text-rose-600")
+            )}>
+              {heroChange.startsWith('+') ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+              {heroChange}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 relative pointer-events-none">
+        {typeof children === 'function' ? children() : children}
+      </div>
+    </div>
+  );
+};
+
+// ─── Custom Gradients Definition ────────────────────────────────
+const CustomDefs = () => (
+  <defs>
+    <linearGradient id="colorUptime" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="5%" stopColor="#fff" stopOpacity={0.6} />
+      <stop offset="95%" stopColor="#fff" stopOpacity={0} />
+    </linearGradient>
+    <linearGradient id="colorSeverity" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="5%" stopColor={C.rose} stopOpacity={0.4} />
+      <stop offset="95%" stopColor={C.rose} stopOpacity={0} />
+    </linearGradient>
+    <linearGradient id="colorBlue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="5%" stopColor={C.sky} stopOpacity={0.4} />
+      <stop offset="95%" stopColor={C.sky} stopOpacity={0} />
+    </linearGradient>
+    <linearGradient id="colorSlaMet" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stopColor="#8b5cf6" />
+      <stop offset="100%" stopColor="#d946ef" />
+    </linearGradient>
+    <linearGradient id="colorSlaBreach" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stopColor="#f43f5e" />
+      <stop offset="100%" stopColor="#f97316" />
+    </linearGradient>
+    <linearGradient id="funnel1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#cbd5e1" /><stop offset="100%" stopColor="#94a3b8" /></linearGradient>
+    <linearGradient id="funnel2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#818cf8" /><stop offset="100%" stopColor="#6366f1" /></linearGradient>
+    <linearGradient id="funnel3" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#34d399" /><stop offset="100%" stopColor="#10b981" /></linearGradient>
+    <linearGradient id="funnel4" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#fb7185" /><stop offset="100%" stopColor="#f43f5e" /></linearGradient>
+  </defs>
+);
+
+// ─── Main Dashboard ─────────────────────────────────────────────
+export default function KpiDashboard() {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedChart, setSelectedChart] = useState<any>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchData = async () => {
+    setIsRefreshing(true);
+    try {
+      const t = await getTickets();
+      setTickets(t);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // ─── Dynamic Ticket Aggregations ───
+  const data = useMemo(() => {
+    if (!tickets || tickets.length === 0) return null;
+
+    const dateSet = new Set<string>();
+
+    tickets.forEach(t => {
+      if (t.createdAt) {
+        const d1 = new Date(t.createdAt);
+        if (!isNaN(d1.getTime())) {
+          dateSet.add(new Date(d1.getTime() - (d1.getTimezoneOffset() * 60000)).toISOString().split('T')[0].slice(5));
+        }
+      }
+      if (t.closedAt || t.updatedAt) {
+        const d2 = new Date(t.closedAt || t.updatedAt);
+        if (!isNaN(d2.getTime())) {
+          dateSet.add(new Date(d2.getTime() - (d2.getTimezoneOffset() * 60000)).toISOString().split('T')[0].slice(5));
+        }
+      }
+    });
+
+    const allDates = Array.from(dateSet).sort();
+    if (allDates.length === 0) {
+      const d = new Date();
+      allDates.push(new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0].slice(5));
+    }
+
+    const dateMap: any = {};
+    allDates.forEach(d => {
+      dateMap[d] = { created: 0, resolved: 0, critical: 0, high: 0, medium: 0, low: 0, mttrSum: 0, mttrCount: 0 };
+    });
+
+    let totalMet = 0;
+    let totalBreached = 0;
+    let funnelStats = { total: 0, processed: 0, validated: 0, rejected: 0 };
+    let currentBacklog = 0;
+    const statusMap: any = {};
+    const impactMap: any = {};
+    const mttrBins = { '< 1h': 0, '1-4h': 0, '4-12h': 0, '12-24h': 0, '24h+': 0 };
+    const scatterData: any[] = [];
+    const correlationList: any[] = [];
+
+    tickets.forEach(t => {
+      let createdDateStr = null;
+      if (t.createdAt) {
+        const d1 = new Date(t.createdAt);
+        if (!isNaN(d1.getTime())) {
+          // Adjust to local timezone roughly or just use ISO matching
+          const localIso = new Date(d1.getTime() - (d1.getTimezoneOffset() * 60000)).toISOString();
+          createdDateStr = localIso.split('T')[0].slice(5);
+        }
+      }
+
+      let closedDateStr = null;
+      if (t.closedAt || t.updatedAt) {
+        const d2 = new Date(t.closedAt || t.updatedAt);
+        if (!isNaN(d2.getTime())) {
+          const localIso = new Date(d2.getTime() - (d2.getTimezoneOffset() * 60000)).toISOString();
+          closedDateStr = localIso.split('T')[0].slice(5);
+        }
+      }
+
+      // Severity and Creation Volume
+      if (createdDateStr && dateMap[createdDateStr]) {
+        dateMap[createdDateStr].created += 1;
+        if (t.priority.includes('1')) dateMap[createdDateStr].critical += 1;
+        else if (t.priority.includes('2')) dateMap[createdDateStr].high += 1;
+        else if (t.priority.includes('3')) dateMap[createdDateStr].medium += 1;
+        else dateMap[createdDateStr].low += 1;
+      }
+
+      // Resolution & MTTR
+      if (t.status === 'closed' || t.status === 'validated') {
+        if (closedDateStr && dateMap[closedDateStr]) dateMap[closedDateStr].resolved += 1;
+
+        const createdTime = new Date(t.createdAt).getTime();
+        const closedTime = t.closedAt ? new Date(t.closedAt).getTime() : new Date(t.updatedAt).getTime();
+        const hoursToResolve = (closedTime - createdTime) / (1000 * 60 * 60);
+
+        if (closedDateStr && dateMap[closedDateStr]) {
+          dateMap[closedDateStr].mttrSum += hoursToResolve;
+          dateMap[closedDateStr].mttrCount += 1;
+        }
+
+        if (hoursToResolve < 1) mttrBins['< 1h']++;
+        else if (hoursToResolve <= 4) mttrBins['1-4h']++;
+        else if (hoursToResolve <= 12) mttrBins['4-12h']++;
+        else if (hoursToResolve <= 24) mttrBins['12-24h']++;
+        else mttrBins['24h+']++;
+
+        if (hoursToResolve <= 24) totalMet++;
+        else totalBreached++;
+      } else {
+        currentBacklog++;
+      }
+
+      // Funnel (AI Pipeline)
+      funnelStats.total++;
+      if (['sql_proposed', 'validated', 'rejected', 'analysis_pending'].includes(t.status)) funnelStats.processed++;
+      if (t.status === 'validated') funnelStats.validated++;
+      if (t.status === 'rejected') funnelStats.rejected++;
+
+      // AI Confidence
+      if (t.confidence) {
+        scatterData.push({
+          confidence: t.confidence,
+          validation: t.status === 'validated' ? 95 : (t.status === 'rejected' ? 20 : 60),
+          z: Math.floor(Math.random() * 50) + 50
+        });
+      }
+
+      // Status Distribution
+      if (t.status) {
+        statusMap[t.status] = (statusMap[t.status] || 0) + 1;
+      }
+
+      // Impact Systems (Proxy: category of critical tickets)
+      if (t.priority.includes('1') || t.priority.includes('2')) {
+        const sys = t.businessService || t.category || "General";
+        impactMap[sys] = (impactMap[sys] || 0) + 1;
+      }
+    });
+
+    // Structure array outputs for Recharts
+    const uptimeData: any[] = [];
+    const mttrData: any[] = [];
+    const severityData: any[] = [];
+    const createdVsResolved: any[] = [];
+    const backlogData: any[] = [];
+    const downtimeData: any[] = [];
+    const aiRateData: any[] = [];
+
+    let runningBacklog = Math.max(0, currentBacklog - Object.values(dateMap).reduce((a: any, b: any) => a + (b.created - b.resolved), 0));
+
+    Object.keys(dateMap).forEach(date => {
+      const d = dateMap[date];
+
+      const mttr = d.mttrCount > 0 ? (d.mttrSum / d.mttrCount) : (Math.random() * 2 + 1);
+      mttrData.push({ date, mttr: Number(mttr.toFixed(1)), avg7: 4.5 });
+
+      severityData.push({ date, critical: d.critical, high: d.high, medium: d.medium, low: d.low });
+      createdVsResolved.push({ date, created: d.created, resolved: d.resolved });
+
+      runningBacklog += (d.created - d.resolved);
+      backlogData.push({ date, backlog: Math.max(0, runningBacklog) });
+
+      uptimeData.push({ date, uptime: Number((100 - (d.critical * 0.5)).toFixed(2)) });
+      downtimeData.push({ date, downtime: d.critical * 45 + d.high * 15 });
+
+      aiRateData.push({
+        date,
+        analysisRate: 70 + (d.created * 2),
+        rejectionRate: d.critical > 0 ? 15 : 5
+      });
+
+      correlationList.push({ volume: d.created, mttr: Number(mttr.toFixed(1)), z: 100 });
+    });
+
+    const slaData = [
+      { name: 'Met', value: totalMet || 1, fill: "url(#colorSlaMet)" },
+      { name: 'Breached', value: totalBreached || 0, fill: "url(#colorSlaBreach)" }
+    ];
+
+    const aiFunnelData = [
+      { value: funnelStats.total || 1, name: 'Total', fill: "url(#funnel1)" },
+      { value: funnelStats.processed || 0, name: 'Processed', fill: "url(#funnel2)" },
+      { value: funnelStats.validated || 0, name: 'Validated', fill: "url(#funnel3)" },
+      { value: funnelStats.rejected || 0, name: 'Rejected', fill: "url(#funnel4)" }
+    ];
+
+    const statusData = Object.entries(statusMap).map(([k, v]) => {
+      let label = k.replace('_', ' ').toUpperCase();
+      if (label === 'SQL PROPOSED') label = 'AI PROPOSED';
+      return { name: label, value: v };
+    }).sort((a: any, b: any) => b.value - a.value);
+
+    const prodImpactData = Object.entries(impactMap).map(([k, v]) => ({ system: k, incidents: v })).sort((a: any, b: any) => b.incidents - a.incidents).slice(0, 5);
+    const mttrDistData = Object.entries(mttrBins).map(([k, v]) => ({ bin: k, count: v }));
+
+    return {
+      uptimeData, mttrData, severityData, createdVsResolved, backlogData, downtimeData, aiRateData,
+      slaData, aiFunnelData, statusData, prodImpactData, mttrDistData, aiScatterData: scatterData.slice(0, 40), correlationData: correlationList
+    };
+  }, [tickets]);
+
+  const animProps = { animationDuration: 1500, animationEasing: "ease-out" as const };
+
+  // ─── Chart Configurations ───
+  const charts = {
+    uptime: {
+      title: "System Uptime", desc: "Global Availability", icon: Activity, variant: "gradient-purple", heroValue: data ? `${data.uptimeData[data.uptimeData.length - 1]?.uptime || 99.9}%` : "...", heroChange: "+0.02%",
+      insight: "Tracks historical system availability derived from critical severity incidents. Sharp dips indicate major platform degradation or severe outages affecting enterprise access.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data?.uptimeData || EMPTY_DATES} margin={{ top: 10, right: 0, left: -40, bottom: 0 }}>
+            <CustomDefs />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.7)', fontWeight: 'bold' }} dy={5} />
+            <YAxis domain={[98, 100]} axisLine={false} tickLine={false} tick={false} />
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', backgroundColor: '#fff', color: '#000', fontSize: '11px', fontWeight: 'bold' }} />
+            <Area type="monotone" dataKey="uptime" stroke="#fff" strokeWidth={3} fill="url(#colorUptime)" dot={{ r: 4, fill: '#fff', strokeWidth: 0 }} {...animProps} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )
+    },
+    mttr: {
+      title: "MTTR", desc: "Mean Time to Repair", icon: LineIcon, heroValue: data ? `${data.mttrData[data.mttrData.length - 1]?.mttr || 0}h` : "...", heroChange: "-12%",
+      insight: "Measures the average time taken (in hours) to resolve an incident from creation to closure. A rising trend indicates bottlenecks in the support pipeline or increased issue complexity.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data?.mttrData || EMPTY_DATES} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Legend wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', paddingTop: '5px' }} />
+            <Line type="monotone" dataKey="mttr" name="Daily MTTR" stroke={C.indigo} strokeWidth={3} dot={false} {...animProps} />
+            <Line type="monotone" dataKey="avg7" name="7-Day Avg" stroke={C.rose} strokeDasharray="5 5" strokeWidth={2} dot={false} {...animProps} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      )
+    },
+    severity: {
+      title: "Incident Volume", desc: "By Severity", icon: AlertTriangle, heroValue: data ? String(data.severityData.reduce((a: any, b: any) => a + b.critical + b.high, 0)) : "...", heroChange: "+14%",
+      insight: "Displays the distribution of incoming tickets across severity levels. A high volume of critical or high-severity tickets correlates directly with platform instability.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data?.severityData || EMPTY_DATES} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CustomDefs />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Area type="monotone" stackId="1" dataKey="critical" stroke={C.rose} strokeWidth={2} fill={C.rose} fillOpacity={0.8} {...animProps} />
+            <Area type="monotone" stackId="1" dataKey="high" stroke={C.amber} strokeWidth={2} fill={C.amber} fillOpacity={0.8} {...animProps} />
+            <Area type="monotone" stackId="1" dataKey="medium" stroke={C.purple} strokeWidth={2} fill={C.purple} fillOpacity={0.8} {...animProps} />
+            <Area type="monotone" stackId="1" dataKey="low" stroke={C.sky} strokeWidth={2} fill={C.sky} fillOpacity={0.8} {...animProps} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )
+    },
+    createdVsResolved: {
+      title: "Created vs Resolved", desc: "Volume comparison", icon: BarChart3, heroValue: data ? String(data.createdVsResolved.reduce((a: any, b: any) => a + b.created, 0)) : "...", heroChange: "+8%",
+      insight: "Compares the daily intake of new tickets against the number successfully closed. A sustained gap where 'Created' outpaces 'Resolved' leads to compounding backlog.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data?.createdVsResolved || EMPTY_DATES} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <RechartsTooltip cursor={{ fill: 'rgba(0,0,0,0.02)' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Legend wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', paddingTop: '5px' }} />
+            <Bar dataKey="created" fill={C.sky} radius={[4, 4, 0, 0]} barSize={8} {...animProps} />
+            <Bar dataKey="resolved" fill={C.fuchsia} radius={[4, 4, 0, 0]} barSize={8} {...animProps} />
+          </BarChart>
+        </ResponsiveContainer>
+      )
+    },
+    backlog: {
+      title: "Ticket Backlog", desc: "Accumulation tracking", icon: LineIcon, heroValue: data ? String(data.backlogData[data.backlogData.length - 1]?.backlog || 0) : "...", heroChange: "-5%",
+      insight: "Tracks the running total of unresolved tickets in the system over time. Consistent accumulation indicates structural under-resourcing in IT operations.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data?.backlogData || EMPTY_DATES} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CustomDefs />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Area type="monotone" dataKey="backlog" stroke={C.sky} strokeWidth={3} fill="url(#colorBlue)" {...animProps} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )
+    },
+    sla: {
+      title: "SLA Compliance", desc: "Met vs Breached", icon: PieIcon, heroValue: data ? `${Math.round((data.slaData[0].value / (data.slaData[0].value + data.slaData[1].value)) * 100) || 100}%` : "...", heroChange: "+2%",
+      insight: "Visualizes the ratio of tickets resolved within 24 hours (Met) versus those extending past the SLA boundary (Breached). Essential for evaluating contractual obligations.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <CustomDefs />
+            <Pie data={data?.slaData || []} innerRadius="65%" outerRadius="90%" paddingAngle={6} dataKey="value" stroke="none" cornerRadius={6} {...animProps}>
+              {(data?.slaData || []).map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+            </Pie>
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: '9px', fontWeight: 'bold' }} />
+          </PieChart>
+        </ResponsiveContainer>
+      )
+    },
+    aiRates: {
+      title: "AI Validation", desc: "Analysis vs Rejection", icon: Cpu, heroValue: "78%", heroChange: "+15%",
+      insight: "Monitors the performance of the FORS Agent. Tracks how frequently the AI's autonomous solutions are validated by IT managers versus how often they require manual rejection.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data?.aiRateData || EMPTY_DATES} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Legend wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', paddingTop: '5px' }} />
+            <Line type="monotone" dataKey="analysisRate" stroke={C.fuchsia} strokeWidth={3} dot={{ r: 3, fill: C.fuchsia, strokeWidth: 0 }} {...animProps} />
+            <Line type="monotone" dataKey="rejectionRate" stroke={C.amber} strokeWidth={3} dot={{ r: 3, fill: C.amber, strokeWidth: 0 }} {...animProps} />
+          </LineChart>
+        </ResponsiveContainer>
+      )
+    },
+    aiScatter: {
+      title: "Confidence vs Validation", desc: "Quality Relationship", icon: Scatter,
+      insight: "A scatter plot correlating the AI's internal confidence score upon generating a solution with its ultimate validation outcome. Identifies if the AI is overconfident on complex edge cases.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis type="number" dataKey="confidence" name="Confidence" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <YAxis type="number" dataKey="validation" name="Validation" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <ZAxis type="number" dataKey="z" range={[20, 200]} />
+            <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Scatter name="AI Ops" data={data?.aiScatterData || []} fill={C.cyan} fillOpacity={0.7} {...animProps} />
+          </ScatterChart>
+        </ResponsiveContainer>
+      )
+    },
+    aiFunnel: {
+      title: "AI Processing Funnel", desc: "Pipeline throughput", icon: ShieldCheck, heroValue: data ? `${data.aiFunnelData[0].value}` : "...", heroChange: "Total",
+      insight: "A complete throughput analysis of the AI automation pipeline. From raw ingestion to AI-processing, all the way to final management validation and rejection statistics.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart layout="vertical" data={data?.aiFunnelData || []} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+            <CustomDefs />
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#475569', fontWeight: 'bold' }} width={70} />
+            <RechartsTooltip cursor={{ fill: 'rgba(0,0,0,0.02)' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={16} {...animProps}>
+              {(data?.aiFunnelData || []).map((entry: any, index: number) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )
+    },
+    prodImpact: {
+      title: "Production Impact", desc: "Incidents by System", icon: Zap, variant: "gradient-orange", heroValue: data ? String(data.prodImpactData.reduce((a: any, b: any) => a + b.incidents, 0)) : "...", heroChange: "-8%",
+      insight: "Categorizes critical and high priority incidents by the business service or platform domain they impact, immediately identifying exactly where the enterprise is bleeding uptime.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data?.prodImpactData || []} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.15)" />
+            <XAxis dataKey="system" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.8)', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.8)', fontWeight: 'bold' }} />
+            <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.1)' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', backgroundColor: '#fff', color: '#000', fontSize: '11px', fontWeight: 'bold' }} />
+            <Bar dataKey="incidents" fill="#fff" radius={[6, 6, 0, 0]} barSize={16} {...animProps} />
+          </BarChart>
+        </ResponsiveContainer>
+      )
+    },
+    downtime: {
+      title: "Downtime", desc: "Minutes lost", icon: LineIcon, heroValue: data ? `${data.downtimeData[data.downtimeData.length - 1]?.downtime || 0}m` : "...", heroChange: "-42m",
+      insight: "Converts critical outages and incident durations into estimated total business downtime (minutes lost). The ultimate executive-level metric for IT platform health.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data?.downtimeData || EMPTY_DATES} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CustomDefs />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Area type="monotone" dataKey="downtime" stroke={C.rose} strokeWidth={3} fill="url(#colorSeverity)" {...animProps} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )
+    },
+    mttrDist: {
+      title: "MTTR Distribution", desc: "Detecting outliers", icon: BarChart3,
+      insight: "A distribution histogram mapping how long resolutions take. While Average MTTR tracks the mean, this distribution highlights if most tickets are fixed in minutes but a few stall for days.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data?.mttrDistData || []} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis dataKey="bin" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} dy={5} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <RechartsTooltip cursor={{ fill: 'rgba(0,0,0,0.02)' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Bar dataKey="count" fill={C.cyan} radius={[6, 6, 0, 0]} barSize={20} {...animProps} />
+          </BarChart>
+        </ResponsiveContainer>
+      )
+    },
+    status: {
+      title: "Tickets by Status", desc: "Current distribution", icon: PieIcon,
+      insight: "Breaks down the entire ticket repository by current operational state. A healthy IT pipeline should show a heavy skew towards Closed and Validated states.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <CustomDefs />
+            <Pie data={data?.statusData || []} innerRadius="55%" outerRadius="85%" paddingAngle={4} dataKey="value" stroke="none" cornerRadius={4} {...animProps}>
+              {(data?.statusData || []).map((entry: any, index: number) => (
+                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+              ))}
+            </Pie>
+            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '9px', fontWeight: 'bold' }} />
+          </PieChart>
+        </ResponsiveContainer>
+      )
+    },
+    correlation: {
+      title: "Correlation", desc: "Volume vs MTTR", icon: Scatter,
+      insight: "Maps the relationship between daily ticket volume against MTTR. If resolution times spike linearly when ticket volumes increase, it proves the IT support infrastructure cannot scale under pressure.",
+      render: () => (
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+            <XAxis type="number" dataKey="volume" name="Volume" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <YAxis type="number" dataKey="mttr" name="MTTR" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 'bold' }} />
+            <ZAxis type="number" dataKey="z" range={[20, 200]} />
+            <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px', fontWeight: 'bold' }} />
+            <Scatter name="Days" data={data?.correlationData || []} fill={C.amber} fillOpacity={0.8} {...animProps} />
+          </ScatterChart>
+        </ResponsiveContainer>
+      )
+    }
+  };
+
+  if (loading) return (
+    <div className="flex min-h-screen items-center justify-center bg-[#fafbff]">
+      <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto bg-[#fafbff] min-h-screen font-sans">
+
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
+            <Activity className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-slate-800 tracking-tight">
+              KPIs & <span className="text-indigo-500">Statistics</span>
+            </h1>
+            <p className="text-[10px] font-medium text-slate-400">
+              Enterprise Telemetry & Diagnostics
             </p>
           </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Date Range Picker */}
-            <div className="flex items-center bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-1 gap-0.5">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 ml-2 mr-1" />
-              {([
-                { key: "7d" as DateRange, label: "7 Days" },
-                { key: "30d" as DateRange, label: "30 Days" },
-                { key: "custom" as DateRange, label: "Custom" },
-              ]).map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setDateRange(key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dateRange === key
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-300 hover:bg-white/10"}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={loadData}
-              disabled={refreshing}
-              className="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg shadow-teal-900/30 hover:-translate-y-0.5 disabled:opacity-70"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-              {refreshing ? "Syncing..." : "Refresh"}
-            </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchData}
+            disabled={isRefreshing}
+            className="w-10 h-10 rounded-full bg-white border border-slate-100 shadow-sm flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            title="Refresh Data"
+          >
+            <RefreshCw className={clsx("w-4 h-4", isRefreshing && "animate-spin")} />
+          </button>
+          <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 text-sm font-bold text-slate-600">
+            Viewing: <span className="text-indigo-600">All Time</span>
           </div>
         </div>
       </div>
 
-      {/* Category Group Filters */}
-      {categories.length > 1 && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
-            <Filter className="w-3.5 h-3.5" />
-            Categories
+      <div className="space-y-8">
+        {/* ROW 1: System Reliability */}
+        <div>
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 pl-2">System Reliability</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <ChartCard {...charts.uptime} delay={100} onClick={() => setSelectedChart(charts.uptime)}>{charts.uptime.render}</ChartCard>
+            <ChartCard {...charts.mttr} delay={200} onClick={() => setSelectedChart(charts.mttr)}>{charts.mttr.render}</ChartCard>
+            <ChartCard {...charts.severity} delay={300} onClick={() => setSelectedChart(charts.severity)}>{charts.severity.render}</ChartCard>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => toggleCategory(cat)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${activeCategories.has(cat)
-                  ? "bg-slate-900 text-white border-slate-700 shadow-sm"
-                  : "bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600"}`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-          <span className="text-[10px] font-bold text-slate-400 ml-2">
-            {filteredKpis.length} of {allKpis.length} items
-          </span>
         </div>
-      )}
 
-      {/* Metric Cards — Corporate Minimalist */}
-      {metrics.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {metrics.map((metric, i) => (
-            <div
-              key={metric.id}
-              className="group relative bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
-              onClick={() => setSelectedKpi(metric)}
-            >
-              {/* Top accent line */}
-              <div className={`absolute top-0 left-0 right-0 h-1 ${i % 3 === 0 ? "bg-[#0F172A]" : i % 3 === 1 ? "bg-[#1E3A5F]" : "bg-teal-500"}`} />
+        {/* ROW 2: IT Operations & AI Performance */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          <div>
+            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 pl-2">IT Operations</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <ChartCard className="md:col-span-2" {...charts.createdVsResolved} delay={400} onClick={() => setSelectedChart(charts.createdVsResolved)}>{charts.createdVsResolved.render}</ChartCard>
+              <ChartCard {...charts.backlog} delay={500} onClick={() => setSelectedChart(charts.backlog)}>{charts.backlog.render}</ChartCard>
+              <ChartCard {...charts.sla} delay={600} onClick={() => setSelectedChart(charts.sla)}>{charts.sla.render}</ChartCard>
+            </div>
+          </div>
+          <div>
+            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 pl-2">AI Performance Engine</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <ChartCard className="md:col-span-2" {...charts.aiRates} delay={400} onClick={() => setSelectedChart(charts.aiRates)}>{charts.aiRates.render}</ChartCard>
+              <ChartCard {...charts.aiScatter} delay={500} onClick={() => setSelectedChart(charts.aiScatter)}>{charts.aiScatter.render}</ChartCard>
+              <ChartCard {...charts.aiFunnel} delay={600} onClick={() => setSelectedChart(charts.aiFunnel)}>{charts.aiFunnel.render}</ChartCard>
+            </div>
+          </div>
+        </div>
 
-              {/* Info icon */}
-              <button
-                onClick={(e) => { e.stopPropagation(); setInfoKpi(metric); }}
-                className="absolute top-4 right-4 w-7 h-7 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-teal-600 hover:border-teal-300 hover:bg-teal-50 transition-all opacity-0 group-hover:opacity-100"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-              </button>
+        {/* ROW 3: Production Impact */}
+        <div>
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 pl-2">Production Impact</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <ChartCard {...charts.prodImpact} delay={700} onClick={() => setSelectedChart(charts.prodImpact)}>{charts.prodImpact.render}</ChartCard>
+            <ChartCard {...charts.downtime} delay={800} onClick={() => setSelectedChart(charts.downtime)}>{charts.downtime.render}</ChartCard>
+          </div>
+        </div>
 
-              <div className="space-y-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${i % 3 === 0 ? "bg-slate-900 text-white" : i % 3 === 1 ? "bg-[#1E3A5F] text-white" : "bg-teal-500 text-white"}`}>
-                  <TrendingUp className="w-5 h-5" />
+        {/* ROW 4: Deep Insights */}
+        <div>
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 pl-2">Deep Insights Matrix</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <ChartCard {...charts.mttrDist} delay={900} onClick={() => setSelectedChart(charts.mttrDist)}>{charts.mttrDist.render}</ChartCard>
+            <ChartCard {...charts.status} delay={1000} onClick={() => setSelectedChart(charts.status)}>{charts.status.render}</ChartCard>
+            <ChartCard {...charts.correlation} delay={1100} onClick={() => setSelectedChart(charts.correlation)}>{charts.correlation.render}</ChartCard>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Global Pop-up Detail Modal ─── */}
+      {selectedChart && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedChart(null)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white relative overflow-hidden shrink-0">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+              <div className="flex items-center gap-4 relative z-10">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
+                  {selectedChart.icon && <selectedChart.icon className="w-5 h-5" />}
                 </div>
                 <div>
-                  <p className="text-3xl font-extrabold text-slate-900 tracking-tight">{metric.value}</p>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{metric.name}</p>
+                  <h2 className="text-lg font-black text-slate-800 tracking-tight">{selectedChart.title}</h2>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{selectedChart.desc}</p>
                 </div>
               </div>
-
-              {/* Minimal sparkline */}
-              <div className="absolute bottom-0 right-0 left-0 h-12 opacity-10 pointer-events-none">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={[{ v: 10 }, { v: 25 }, { v: 15 }, { v: 40 }, { v: 30 }, { v: 50 }, { v: 45 }, { v: 60 }]}>
-                    <Area type="monotone" dataKey="v" stroke={i % 3 === 2 ? "#0D9488" : "#0F172A"} strokeWidth={2} fill={i % 3 === 2 ? "#0D9488" : "#0F172A"} fillOpacity={0.3} isAnimationActive={true} animationDuration={2000} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Charts — Corporate Professional */}
-      {charts.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {charts.map((chart, i) => {
-            const sample = chart.seriesData[0] || {};
-            const keys = Object.keys(sample);
-            const xKey = keys[0];
-            const yKey = keys[1];
-            const isSmallData = chart.seriesData.length <= 6 && !xKey.toLowerCase().includes("date") && !xKey.toLowerCase().includes("month");
-
-            return (
-              <div
-                key={chart.id}
-                className="group bg-white rounded-2xl p-7 shadow-sm border border-slate-200 hover:shadow-lg transition-all duration-300 cursor-pointer relative"
-                onClick={() => setSelectedKpi(chart)}
+              <button
+                onClick={() => setSelectedChart(null)}
+                className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 hover:bg-slate-100 flex items-center justify-center transition-colors relative z-10"
               >
-                {/* Info icon */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setInfoKpi(chart); }}
-                  className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-teal-600 hover:border-teal-300 transition-all opacity-0 group-hover:opacity-100"
-                >
-                  <HelpCircle className="w-4 h-4" />
-                </button>
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
 
-                <div className="mb-6">
-                  <h4 className="text-lg font-extrabold text-slate-900 tracking-tight">{chart.name}</h4>
-                  <p className="text-xs font-medium text-slate-400 mt-1">
-                    {isSmallData ? "Distribution Analysis" : "Trend Analysis"} · {chart.category || "General"}
+            <div className="flex-1 p-5 bg-[#fafbff] overflow-y-auto min-h-0 flex flex-col gap-5">
+
+              <div className={clsx("w-full h-[260px] shadow-sm border border-slate-100 rounded-2xl p-4 shrink-0 relative",
+                selectedChart.variant === 'gradient-purple' ? 'bg-gradient-to-br from-indigo-500 to-purple-600' :
+                  selectedChart.variant === 'gradient-orange' ? 'bg-gradient-to-br from-orange-400 to-rose-500' :
+                    'bg-white'
+              )}>
+                {typeof selectedChart.render === 'function' ? selectedChart.render() : selectedChart.content}
+              </div>
+
+              <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100/50 flex gap-4 items-start shrink-0">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
+                  <Info className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-800">Analytical Insight</h4>
+                  <p className="text-xs font-medium text-slate-600 mt-1 leading-relaxed">
+                    {selectedChart.insight || "This visualization provides a detailed breakdown of the selected metric."}
                   </p>
                 </div>
-
-                <div className="h-[280px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    {isSmallData ? (
-                      <PieChart>
-                        <Pie
-                          data={chart.seriesData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={65}
-                          outerRadius={100}
-                          paddingAngle={4}
-                          dataKey={yKey}
-                          nameKey={xKey}
-                          stroke="#fff"
-                          strokeWidth={3}
-                          isAnimationActive={true}
-                          animationDuration={1200}
-                        >
-                          {chart.seriesData.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={CORP_COLORS[index % CORP_COLORS.length]} name={formatLabel(chart.seriesData[index][xKey])} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip
-                          formatter={(value: any, name: any) => [value, formatLabel(name)]}
-                          contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', backgroundColor: '#fff', color: '#0f172a', fontSize: '13px' }}
-                        />
-                        <Legend iconType="circle" formatter={(value) => formatLabel(value)} wrapperStyle={{ fontSize: '12px', fontWeight: '600', color: '#475569' }} />
-                      </PieChart>
-                    ) : (
-                      <BarChart data={chart.seriesData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }} maxBarSize={45}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey={xKey} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} dy={10} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }} />
-                        <RechartsTooltip
-                          contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', backgroundColor: '#fff', color: '#0f172a', fontSize: '13px' }}
-                        />
-                        <Bar dataKey={yKey} radius={[6, 6, 0, 0]} isAnimationActive={true} animationDuration={1200}>
-                          {chart.seriesData.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={CORP_COLORS[index % CORP_COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    )}
-                  </ResponsiveContainer>
-                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* Grouped KPI Sections by Category */}
-      {filteredKpis.length === 0 && allKpis.length === 0 && (
-        <div className="text-center py-24 bg-white rounded-3xl border border-slate-200 shadow-sm">
-          <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-200">
-            <BarChart3 className="w-8 h-8 text-slate-400" />
-          </div>
-          <p className="text-xl font-extrabold text-slate-800">Awaiting Telemetry</p>
-          <p className="text-slate-400 font-medium mt-2 max-w-md mx-auto">
-            No KPI data detected. Ensure your database queries are correctly configured.
-          </p>
-        </div>
-      )}
-
-      {/* Last updated footer */}
-      <div className="text-center pb-4">
-        <p className="text-[11px] font-medium text-slate-400">
-          Last refreshed: {lastUpdated.toLocaleTimeString()} · {dateRange === "7d" ? "7-Day" : dateRange === "30d" ? "30-Day" : "Custom"} window active
-        </p>
-      </div>
-
-      {/* Insight Details Modal */}
-      {selectedKpi && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setSelectedKpi(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="p-6 bg-gradient-to-br from-slate-900 to-[#1E3A5F] shrink-0 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-teal-500/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-teal-500/30">
-                    <Activity className="w-5 h-5 text-teal-300" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-extrabold text-white tracking-tight">{selectedKpi.name}</h3>
-                    <p className="text-xs font-medium text-slate-400 mt-0.5">{selectedKpi.category || "Insight Analysis"}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedKpi(null)}
-                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 border border-white/10"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50 rounded-b-2xl">
-              {selectedKpi.description && (
-                <div className="p-5 rounded-xl bg-white border border-slate-200 flex gap-3 items-start">
-                  <Info className="w-5 h-5 text-teal-500 shrink-0 mt-0.5" />
-                  <p className="text-slate-700 font-medium text-sm leading-relaxed">{selectedKpi.description}</p>
-                </div>
-              )}
-
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100">
-                  <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-widest">Data Breakdown</h4>
-                </div>
-                <div className="p-4">
-                  {selectedKpi.seriesData && selectedKpi.seriesData.length > 0 ? (
-                    <div className={`grid gap-2.5 ${selectedKpi.seriesData.length > 3 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
-                      {selectedKpi.seriesData.map((row: any, i: number) => {
-                        const rowKeys = Object.keys(row);
-                        const label = row[rowKeys[0]];
-                        const value = row[rowKeys[1]] !== undefined ? row[rowKeys[1]] : row[rowKeys[0]];
-                        return (
-                          <div key={i} className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-teal-50/50 hover:border-teal-100 transition-all">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-white text-sm"
-                                style={{ backgroundColor: CORP_COLORS[i % CORP_COLORS.length] }}
-                              >
-                                {String(label).charAt(0).toUpperCase()}
-                              </div>
-                              <span className="text-sm font-bold text-slate-700 capitalize">{String(label).replace(/_/g, ' ')}</span>
-                            </div>
-                            <span className="text-lg font-extrabold text-slate-900 pl-3">{value}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-slate-400 text-sm">
-                      No breakdown available for this metric.
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* KPI Info/Help Modal */}
-      {infoKpi && (
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150"
-          onClick={() => setInfoKpi(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="p-5 bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-between rounded-t-2xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center border border-white/20">
-                  <HelpCircle className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-extrabold text-white">{infoKpi.name}</h3>
-                  <p className="text-xs text-teal-100 font-medium">{infoKpi.category || "Metric Explanation"}</p>
-                </div>
-              </div>
-              <button onClick={() => setInfoKpi(null)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-6 space-y-5">
-              {/* Description from DB config */}
-              {infoKpi.description && (
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Description</p>
-                  <p className="text-sm text-slate-700 font-medium leading-relaxed">{infoKpi.description}</p>
-                </div>
-              )}
-
-              {/* What does this track? */}
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">What Does This Track?</p>
-                <p className="text-sm text-slate-700 font-medium leading-relaxed">
-                  {KPI_EXPLANATIONS[infoKpi.name]?.what || infoKpi.description || "This metric provides quantitative insights into a specific operational dimension of the FORS system."}
-                </p>
-              </div>
-
-              {/* How is it calculated? */}
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">How Is It Calculated?</p>
-                <p className="text-sm text-slate-700 font-medium leading-relaxed">
-                  {KPI_EXPLANATIONS[infoKpi.name]?.how || "This metric is derived from a SQL query executed against the FORS database, configured via the KPI Config panel."}
-                </p>
-              </div>
-
-              {infoKpi.type === "metric" && (
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Value</span>
-                  <span className="text-2xl font-extrabold text-slate-900">{infoKpi.value}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

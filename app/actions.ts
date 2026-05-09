@@ -2,7 +2,7 @@
 
 import { query, execute, transaction, generateId } from "@/lib/db";
 import { Ticket, TicketAnalysis, ChatMessage, KPI, ActivityLog, User } from "@/lib/types";
-import { generateAnalysisWithOllama, getGostChatResponse } from "@/lib/ai";
+import { generateAnalysisWithOllama, getAgentChatResponse } from "@/lib/ai";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/audit";
@@ -113,11 +113,37 @@ export async function getAnalyses(): Promise<TicketAnalysis[]> {
       impactedTables: parsedTables,
       recommendation: r.resolution_steps || "",
       sqlProposal: r.suggested_sql || "",
-      gostSummary: "",
+      agentSummary: "",
       urgency: "high"
     };
   });
   return JSON.parse(JSON.stringify(data));
+}
+
+export async function getTicketAnalysisAction(ticketId: string): Promise<{ success: boolean; analysis?: TicketAnalysis; error?: string }> {
+  try {
+    const [row] = await query<any>("SELECT * FROM ai_analysis WHERE incident_number = ?", [ticketId]);
+    if (!row) return { success: false, error: "Analysis not found" };
+
+    let parsedTables = [];
+    try {
+      if (row.impacted_tables) parsedTables = JSON.parse(row.impacted_tables);
+    } catch (e) {}
+
+    const analysis: TicketAnalysis = {
+      ticketId: row.incident_number,
+      rootCause: row.root_cause || "Unknown",
+      impactedTables: parsedTables,
+      recommendation: row.resolution_steps || "",
+      sqlProposal: row.suggested_sql || "",
+      agentSummary: "",
+      urgency: "high"
+    };
+
+    return { success: true, analysis };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 export async function getConversations() {
@@ -177,7 +203,7 @@ export async function getChatMessages(): Promise<ChatMessage[]> {
     role: r.role,
     content: r.content,
     createdAt: r.createdAt,
-    senderName: r.role === 'AI' ? 'GOST AI' : r.senderName
+    senderName: r.role === 'AI' ? 'FORS Agent' : r.senderName
   }));
   return JSON.parse(JSON.stringify(data));
 }
@@ -293,7 +319,7 @@ export async function getUsers(): Promise<User[]> {
   return rows.map((r: any) => ({
     matricule: r.matricule,
     name: r.name,
-    surname: r.prenom,
+    surname: r.surname,
     role: r.role
   }));
 }
@@ -400,7 +426,7 @@ export async function analyzeTicketAction(ticketId: string, title: string, descr
       impactedTables: [],
       sqlProposal: matchingQuery.sql,
       recommendation: `Automated resolution via predefined query: ${matchingQuery.description}`,
-      gostSummary: "Matched a known solution template. SQL extracted automatically."
+      agentSummary: "Matched a known solution template. SQL extracted automatically."
     };
   } else {
     analysis = await generateAnalysisWithOllama(title, description);
@@ -482,7 +508,7 @@ ${analysis.confidence}%`;
   return JSON.parse(JSON.stringify(analysis));
 }
 
-export async function chatWithGostAction(ticketId: string, message: string, history: any[] = []) {
+export async function chatWithAgentAction(ticketId: string, message: string, history: any[] = []) {
   const sessionValue = await getSession();
   const userMatricule = sessionValue.user?.matricule || "UNKNOWN";
 
@@ -514,7 +540,7 @@ export async function chatWithGostAction(ticketId: string, message: string, hist
     console.error("Failed to save user chat:", err);
   }
 
-  // Fetch the full ticket + its AI analysis to give GOST strict context
+  // Fetch the full ticket + its AI analysis to give FORS Agent strict context
   const [ticketRow] = await query<any>(
     `SELECT t.number, t.short_description, t.description, t.state, t.priority,
             t.assignment_group, t.assigned_to, t.comments,
@@ -525,7 +551,7 @@ export async function chatWithGostAction(ticketId: string, message: string, hist
     [ticketId]
   );
 
-  const reply = await getGostChatResponse(message, history, ticketRow ?? null);
+  const reply = await getAgentChatResponse(message, history, ticketRow ?? null);
 
   // 2. Save AI Reply
   try {
@@ -564,7 +590,7 @@ export async function getChatMessagesForTicketAction(ticketId: string): Promise<
     role: r.role,
     content: r.content,
     createdAt: r.createdAt,
-    senderName: r.senderName || (r.role === 'AI' ? 'GOST AI' : 'Agent')
+    senderName: r.role === 'AI' ? 'FORS Agent' : (r.senderName || 'Agent')
   }));
   return JSON.parse(JSON.stringify(data));
 }
@@ -1272,6 +1298,46 @@ export async function updateTicketSapModuleAction(ticketId: string, sapModule: s
   return { success: true };
 }
 
+export async function updateTicketStatusAction(ticketId: string, status: string) {
+  const session = await getSession();
+  const userMatricule = session.user?.matricule || "SYSTEM";
+
+  await query("UPDATE tickets SET state = ?, sys_updated_on = NOW() WHERE number = ?", [status, ticketId]);
+
+  await logActivity("TICKET_STATUS_UPDATED", {
+    ticketId,
+    userMatricule,
+    details: { message: `Status updated to ${status}` }
+  });
+
+  revalidatePath(`/tickets/${ticketId}`);
+  return { success: true };
+}
+
+export async function addTicketCommentAction(ticketId: string, comment: string) {
+  const session = await getSession();
+  const userMatricule = session.user?.matricule || "SYSTEM";
+
+  await query(`
+    UPDATE tickets 
+    SET comments = CASE 
+      WHEN comments IS NULL OR comments = '' THEN ? 
+      ELSE CONCAT(comments, '\n\n', ?) 
+    END,
+    sys_updated_on = NOW() 
+    WHERE number = ?
+  `, [comment, comment, ticketId]);
+
+  await logActivity("TICKET_COMMENT_ADDED", {
+    ticketId,
+    userMatricule,
+    details: { message: `Added comment: ${comment.substring(0, 50)}${comment.length > 50 ? '...' : ''}`, comment }
+  });
+
+  revalidatePath(`/tickets/${ticketId}`);
+  return { success: true };
+}
+
 /**
  * Fetches recent notifications (new tickets, AI analysis completions).
  * Used by the Header's polling mechanism.
@@ -1280,7 +1346,7 @@ export async function getNotificationsAction() {
   const q = `
     (SELECT 
       'info' as type, 
-      CONCAT('Analysed: ', incident_number) as title, 
+      CONCAT('AI Analysed: ', incident_number) as title, 
       root_cause as message, 
       created_at as timestamp,
       incident_number as linkId
@@ -1291,15 +1357,17 @@ export async function getNotificationsAction() {
     
     (SELECT 
       'alert' as type, 
-      CONCAT('New Ticket: ', number) as title, 
+      CONCAT('n8n Incoming: ', number) as title, 
       short_description as message, 
       sys_created_on as timestamp,
       number as linkId
     FROM tickets
-    WHERE state = 'New')
+    WHERE (state = 'New' OR state = 'Analysis Pending') 
+      AND (opened_by != 'Manual Entry')
+    )
     
     ORDER BY timestamp DESC 
-    LIMIT 15
+    LIMIT 10
   `;
   const rows = await query<any>(q);
   return JSON.parse(JSON.stringify(rows));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense, useMemo, useCallback, startTransition, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   getExplorerMenus,
@@ -18,7 +19,7 @@ import {
   Layout, Layers, Table2, HardDrive, Cpu, Search, X,
   FileCode, Tag, Code2, Link as LinkIcon, ChevronRight,
   AlignLeft, Hash, Compass, Download, CheckSquare, Square,
-  Plus, Loader2,
+  Plus, Loader2, LayoutDashboard,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -47,12 +48,12 @@ type DbIndex = {
 };
 
 const COLORS = [
-  "from-blue-500 to-cyan-500",
-  "from-purple-500 to-pink-500",
-  "from-emerald-500 to-teal-500",
-  "from-orange-500 to-amber-500",
   "from-indigo-500 to-violet-500",
-  "from-rose-500 to-red-500",
+  "from-blue-500 to-indigo-600",
+  "from-violet-500 to-fuchsia-500",
+  "from-sky-500 to-indigo-500",
+  "from-indigo-600 to-blue-700",
+  "from-violet-600 to-indigo-800",
 ];
 
 function getGradient(label: string) {
@@ -169,16 +170,6 @@ const EXPLORER_CREATE_THEME: Record<ExplorerCreateTarget, {
   modules: {
     label: "Menu",
     helper: "Map the product structure and place new modules exactly where they belong.",
-    accent: "from-blue-500 via-cyan-500 to-sky-500",
-    shadow: "shadow-blue-500/20",
-    ring: "focus:ring-blue-500/25 focus:border-blue-400",
-    panelGlow: "from-blue-500/20 via-cyan-400/10 to-transparent",
-    pill: "bg-blue-500/10 text-blue-700 border-blue-200/70",
-    button: "bg-blue-600 hover:bg-blue-500",
-  },
-  tables: {
-    label: "Table",
-    helper: "Register a new business table and describe the data domain it owns.",
     accent: "from-indigo-500 via-violet-500 to-blue-500",
     shadow: "shadow-indigo-500/20",
     ring: "focus:ring-indigo-500/25 focus:border-indigo-400",
@@ -186,35 +177,45 @@ const EXPLORER_CREATE_THEME: Record<ExplorerCreateTarget, {
     pill: "bg-indigo-500/10 text-indigo-700 border-indigo-200/70",
     button: "bg-indigo-600 hover:bg-indigo-500",
   },
+  tables: {
+    label: "Table",
+    helper: "Register a new business table and describe the data domain it owns.",
+    accent: "from-blue-500 via-indigo-500 to-violet-500",
+    shadow: "shadow-blue-500/20",
+    ring: "focus:ring-blue-500/25 focus:border-blue-400",
+    panelGlow: "from-blue-500/20 via-indigo-400/10 to-transparent",
+    pill: "bg-blue-500/10 text-blue-700 border-blue-200/70",
+    button: "bg-blue-600 hover:bg-blue-500",
+  },
   transactions: {
     label: "Transaction",
     helper: "Capture backend programs, jobs, or services and link them to their tables.",
-    accent: "from-purple-500 via-fuchsia-500 to-pink-500",
-    shadow: "shadow-purple-500/20",
-    ring: "focus:ring-purple-500/25 focus:border-purple-400",
-    panelGlow: "from-purple-500/20 via-fuchsia-400/10 to-transparent",
-    pill: "bg-purple-500/10 text-purple-700 border-purple-200/70",
-    button: "bg-purple-600 hover:bg-purple-500",
+    accent: "from-violet-500 via-fuchsia-500 to-indigo-500",
+    shadow: "shadow-violet-500/20",
+    ring: "focus:ring-violet-500/25 focus:border-violet-400",
+    panelGlow: "from-violet-500/20 via-fuchsia-400/10 to-transparent",
+    pill: "bg-violet-500/10 text-violet-700 border-violet-200/70",
+    button: "bg-violet-600 hover:bg-violet-500",
   },
   fields: {
     label: "Field",
     helper: "Define column structure with type, nullability, and order for a selected table.",
-    accent: "from-emerald-500 via-teal-500 to-cyan-500",
-    shadow: "shadow-emerald-500/20",
-    ring: "focus:ring-emerald-500/25 focus:border-emerald-400",
-    panelGlow: "from-emerald-500/20 via-teal-400/10 to-transparent",
-    pill: "bg-emerald-500/10 text-emerald-700 border-emerald-200/70",
-    button: "bg-emerald-600 hover:bg-emerald-500",
+    accent: "from-sky-500 via-indigo-500 to-blue-500",
+    shadow: "shadow-sky-500/20",
+    ring: "focus:ring-sky-500/25 focus:border-sky-400",
+    panelGlow: "from-sky-500/20 via-indigo-400/10 to-transparent",
+    pill: "bg-sky-500/10 text-sky-700 border-sky-200/70",
+    button: "bg-sky-600 hover:bg-sky-500",
   },
   indexes: {
     label: "Index",
     helper: "Create performance metadata and identify which fields participate in each index.",
-    accent: "from-amber-500 via-orange-500 to-rose-500",
-    shadow: "shadow-amber-500/20",
-    ring: "focus:ring-amber-500/25 focus:border-amber-400",
-    panelGlow: "from-amber-500/20 via-orange-400/10 to-transparent",
-    pill: "bg-amber-500/10 text-amber-700 border-amber-200/70",
-    button: "bg-amber-600 hover:bg-amber-500",
+    accent: "from-indigo-600 via-blue-600 to-violet-600",
+    shadow: "shadow-indigo-600/20",
+    ring: "focus:ring-indigo-600/25 focus:border-indigo-500",
+    panelGlow: "from-indigo-600/20 via-blue-400/10 to-transparent",
+    pill: "bg-indigo-600/10 text-indigo-800 border-indigo-200/70",
+    button: "bg-indigo-700 hover:bg-indigo-600",
   },
 };
 
@@ -251,6 +252,31 @@ function toggleExplorerListValue(currentValue: string, value: string) {
   return mergeExplorerList(Array.from(next));
 }
 
+function LayoutToggle({ layout, onChange }: { layout: "grid" | "list"; onChange: (v: "grid" | "list") => void }) {
+  return (
+    <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0">
+      <button
+        onClick={() => onChange("grid")}
+        className={clsx(
+          "p-1.5 rounded-lg transition-all",
+          layout === "grid" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+        )}
+      >
+        <LayoutDashboard className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => onChange("list")}
+        className={clsx(
+          "p-1.5 rounded-lg transition-all",
+          layout === "list" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+        )}
+      >
+        <AlignLeft className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 function ExplorerAddButton({ target, onClick }: { target: ExplorerCreateTarget; onClick: () => void }) {
   const theme = EXPLORER_CREATE_THEME[target];
 
@@ -258,14 +284,14 @@ function ExplorerAddButton({ target, onClick }: { target: ExplorerCreateTarget; 
     <button
       onClick={onClick}
       className={clsx(
-        "inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black text-white transition-all active:scale-[0.98]",
-        "shadow-lg backdrop-blur-md",
+        "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-black text-white transition-all active:scale-[0.98]",
+        "shadow-md backdrop-blur-md",
         theme.button,
         theme.shadow,
       )}
     >
-      <Plus className="h-4 w-4" />
-      Create {theme.label}
+      <Plus className="h-3.5 w-3.5" />
+      {theme.label}
     </button>
   );
 }
@@ -376,7 +402,10 @@ function ExplorerCreateModal({
     };
   }, [modalTarget, fieldForm.tableId, indexForm.tableId]);
 
-  if (!open || !target) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!open || !target || !mounted) return null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -404,8 +433,10 @@ function ExplorerCreateModal({
     await onSubmit("indexes", indexForm);
   }
 
-  return (
-    <div className="fixed top-14 left-56 right-0 bottom-0 z-[999] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-xl" onClick={onClose}>
+  const modalRoot = document.getElementById("modal-portal") || document.body;
+
+  return createPortal(
+    <div className="fixed inset-y-0 right-0 left-64 z-[999] flex items-center justify-center bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-300 p-8" onClick={onClose}>
       <div
         className="relative w-full max-w-xl overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_20px_80px_rgba(15,23,42,0.20)]"
         onClick={(event) => event.stopPropagation()}
@@ -916,7 +947,8 @@ function ExplorerCreateModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    modalRoot
   );
 }
 
@@ -974,6 +1006,7 @@ function ExplorerContent() {
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [layout, setLayout] = useState<"grid" | "list">("grid");
 
   const loadExplorerData = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -1207,17 +1240,19 @@ function ExplorerContent() {
           </p>
         </div>
       ) : activeTab === "modules" ? (
-        renderModulesView({
-          headMenus: filteredHeadMenus,
-          menus,
-          selectedMenuIds,
-          handleMenuSelect,
-          setSelectedMenuIds,
-          search: moduleSearch,
-          setSearch: setModuleSearch,
-          totalCount: headMenus.length,
-          headerAction: addControl,
-        })
+        <ModulesView
+          headMenus={filteredHeadMenus}
+          menus={menus}
+          selectedMenuIds={selectedMenuIds}
+          handleMenuSelect={handleMenuSelect}
+          setSelectedMenuIds={setSelectedMenuIds}
+          search={moduleSearch}
+          setSearch={setModuleSearch}
+          totalCount={headMenus.length}
+          headerAction={addControl}
+          layout={layout}
+          onLayoutChange={setLayout}
+        />
       ) : activeTab === "transactions" ? (
         <TransactionsView
           txns={filteredTxns}
@@ -1226,6 +1261,8 @@ function ExplorerContent() {
           selectedTxn={selectedTxnFromList}
           onSelectTxn={setSelectedTxnFromList}
           headerAction={addControl}
+          layout={layout}
+          onLayoutChange={setLayout}
           onJumpToTable={(name: string) => {
             const tb = tables.find(t => t.name.toLowerCase() === name.toLowerCase());
             if (tb) { setTab("tables"); handleTableSelect(tb); }
@@ -1250,13 +1287,15 @@ function ExplorerContent() {
           onSelectTxn={setSelectedTxn}
           onClose={() => { setSelectedTable(null); setSelectedTxn(null); }}
           headerAction={addControl}
+          layout={layout}
+          onLayoutChange={setLayout}
           onJumpToTable={(name: string) => {
             const tb = tables.find(t => t.name.toLowerCase() === name.toLowerCase());
             if (tb) handleTableSelect(tb);
           }}
         />
       )}
-      <ExplorerCreateModal
+    <ExplorerCreateModal
         open={createTarget !== null}
         target={createTarget}
         menus={menus}
@@ -1272,41 +1311,99 @@ function ExplorerContent() {
 
 // ─── Modules View ─────────────────────────────────────────────────────────────
 
-function renderModulesView({
+function ModulesView({
   headMenus, menus, selectedMenuIds, handleMenuSelect, setSelectedMenuIds,
-  search, setSearch, totalCount, headerAction
+  search, setSearch, totalCount, headerAction, layout, onLayoutChange
 }: {
   headMenus: Menu[], menus: Menu[], selectedMenuIds: string[],
   handleMenuSelect: (m: Menu, lvl: number) => void,
   setSelectedMenuIds: (ids: string[]) => void,
   search: string, setSearch: (s: string) => void,
   totalCount: number,
-  headerAction?: ReactNode
+  headerAction?: ReactNode,
+  layout: "grid" | "list",
+  onLayoutChange: (v: "grid" | "list") => void,
 }) {
+  const [exportMode, setExportMode] = useState(false);
+  const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelectedForExport(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const getExportData = () => {
+    const list = exportMode ? headMenus.filter(m => selectedForExport.has(m.id)) : headMenus;
+    return list;
+  };
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-8 pt-8 pb-5 shrink-0 border-b border-slate-200/60 bg-white/60 backdrop-blur-md z-10 sticky top-0 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/20">
-            <Layout className="w-5 h-5 text-white" />
+      <div className="px-8 py-5 shrink-0 border-b border-slate-200/60 bg-white/60 backdrop-blur-md z-10 sticky top-0 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
+            <Layout className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h4 className="text-xl font-bold font-sans text-slate-800 tracking-tight">FORS Explorer</h4>
+            <h4 className="text-sm font-black font-sans text-slate-800 tracking-tight">FORS <span className="text-indigo-600">Explorer</span></h4>
             <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-xs font-normal text-slate-400">Everything connected, Browse Menus.</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Menus</p>
               <div className="w-1 h-1 rounded-full bg-slate-300" />
-              <p className="text-xs font-bold text-blue-600">{totalCount} modules total</p>
+              <p className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase tracking-widest">{totalCount}</p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <LayoutToggle layout={layout} onChange={onLayoutChange} />
+          <button
+            onClick={() => { setExportMode(!exportMode); setSelectedForExport(new Set()); }}
+            className={clsx(
+              "flex items-center gap-2 px-3 py-2 border rounded-xl text-[10px] font-black uppercase transition-all",
+              exportMode ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "bg-white border-slate-200 text-slate-600 hover:border-indigo-400"
+            )}
+          >
+            <CheckSquare className="w-3.5 h-3.5" /> {exportMode ? "Exit Selection" : "Select to Export"}
+          </button>
+
+          {(!exportMode || selectedForExport.size > 0) && (
+            <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shrink-0">
+              <button
+                onClick={() => {
+                  const data = getExportData();
+                  const rows = [["ID", "Title", "Description", "Parent ID", "Display Order", "Child Modules"]];
+                  data.forEach(m => rows.push([m.id, m.title, m.description || "", m.parentId || "ROOT", m.order.toString(), m.childCount.toString()]));
+                  const blob = new Blob([rows.map(r => r.map(escapeCSV).join(",")).join("\n")], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = `fors_architecture_export_${Date.now()}.csv`; a.click();
+                }}
+                className="px-3 py-2 text-[10px] font-black text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all border-r border-slate-100 flex items-center gap-1.5"
+              >
+                CSV {exportMode && `(${selectedForExport.size})`}
+              </button>
+              <button
+                onClick={() => {
+                  const data = getExportData();
+                  const win = window.open("", "_blank");
+                  if (!win) return;
+                  win.document.write(`<html><head><title>FORS Architecture Report</title><style>body{font-family:sans-serif;padding:40px;color:#334155}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #e2e8f0;padding:12px;text-align:left;font-size:12px}th{background:#f8fafc;font-weight:900;text-transform:uppercase;font-size:10px;color:#6366f1}tr:nth-child(even){background:#fcfdff}</style></head><body><h1 style="color:#1e293b;margin-bottom:5px">FORS Architecture Registry</h1><p style="font-size:12px;color:#64748b;margin-bottom:30px">Generated on ${new Date().toLocaleString()}</p><table><thead><tr><th>ID</th><th>Module Title</th><th>Parent</th><th>Order</th><th>Sub-Modules</th><th>Description</th></tr></thead><tbody>${data.map(m => `<tr><td><code style="background:#f1f5f9;padding:2px 4px;border-radius:4px">${m.id}</code></td><td><b>${m.title}</b></td><td>${m.parentId || "ROOT"}</td><td>${m.order}</td><td>${m.childCount}</td><td style="color:#64748b">${m.description || "-"}</td></tr>`).join("")}</tbody></table></body></html>`);
+                  win.document.close(); win.print();
+                }}
+                className="px-3 py-2 text-[10px] font-black text-slate-600 hover:text-red-600 hover:bg-slate-50 transition-all flex items-center gap-1.5"
+              >
+                PDF {exportMode && `(${selectedForExport.size})`}
+              </button>
+            </div>
+          )}
           <div className="w-72 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
-              type="text" placeholder="Search modules..."
+              type="text" placeholder="Search architecture..."
               value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/20 transition-all"
+              className="w-full bg-slate-100 border-none rounded-xl pl-9 pr-4 py-2 text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
             />
           </div>
           {headerAction}
@@ -1314,11 +1411,69 @@ function renderModulesView({
       </div>
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {headMenus.map(m => (
-              <ModuleCard key={m.id} menu={m} isSelected={selectedMenuIds[0] === m.id} onClick={() => handleMenuSelect(m, 0)} />
-            ))}
-          </div>
+          {layout === "grid" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {headMenus.map(m => {
+                const isSelExport = selectedForExport.has(m.id);
+                return (
+                  <div key={m.id} className="relative group">
+                    <ModuleCard menu={m} isSelected={selectedMenuIds[0] === m.id} onClick={() => exportMode ? toggleSelect(m.id) : handleMenuSelect(m, 0)} />
+                    {exportMode && (
+                      <div className={clsx(
+                        "absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all shadow-sm pointer-events-none",
+                        isSelExport ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200"
+                      )}>
+                        {isSelExport && <CheckSquare className="w-4 h-4" />}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-2 max-w-4xl">
+              {headMenus.map(m => {
+                const grad = getGradient(m.title);
+                const isSelected = selectedMenuIds[0] === m.id;
+                const isSelExport = selectedForExport.has(m.id);
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => exportMode ? toggleSelect(m.id) : handleMenuSelect(m, 0)}
+                    className={clsx(
+                      "flex items-center gap-4 px-5 py-3 rounded-2xl border transition-all cursor-pointer group relative overflow-hidden",
+                      isSelected
+                        ? "bg-indigo-50 border-indigo-200 shadow-sm"
+                        : exportMode && isSelExport
+                          ? "bg-indigo-50/50 border-indigo-300 shadow-sm"
+                          : "bg-white border-slate-100 hover:border-slate-300 hover:shadow-md"
+                    )}
+                  >
+                    {exportMode && (
+                      <div className={clsx(
+                        "w-5 h-5 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all",
+                        isSelExport ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200 bg-white"
+                      )}>
+                        {isSelExport && <CheckSquare className="w-3.5 h-3.5" />}
+                      </div>
+                    )}
+                    <div className={clsx("absolute left-0 top-0 bottom-0 w-1 opacity-60", grad)} />
+                    <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm bg-gradient-to-br", grad)}>
+                      <Layers className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-[13px] font-black text-slate-800 uppercase tracking-tight truncate">{m.title}</h3>
+                        <span className="text-[9px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100 uppercase tracking-widest shrink-0">{m.childCount} Sub</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">{m.description || "Core system module."}</p>
+                    </div>
+                    <ChevronRight className={clsx("w-4 h-4 transition-all", isSelected ? "text-indigo-500 translate-x-1" : "text-slate-300 group-hover:text-slate-500")} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className={clsx(
@@ -1341,73 +1496,188 @@ function renderModulesView({
 
 // ─── Transactions View ────────────────────────────────────────────────────────
 
-function TransactionsView({ txns, search, setSearch, selectedTxn, onSelectTxn, onJumpToTable, headerAction }: {
+function TransactionsView({ txns, search, setSearch, selectedTxn, onSelectTxn, onJumpToTable, headerAction, layout, onLayoutChange }: {
   txns: Txn[], search: string, setSearch: (s: string) => void,
   selectedTxn: Txn | null, onSelectTxn: (t: Txn | null) => void,
   onJumpToTable: (name: string) => void,
   headerAction?: ReactNode,
+  layout: "grid" | "list",
+  onLayoutChange: (v: "grid" | "list") => void,
 }) {
+  const [exportMode, setExportMode] = useState(false);
+  const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelectedForExport(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const chosen = exportMode ? txns.filter(t => selectedForExport.has(t.id)) : txns;
+
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* List */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-8 pt-8 pb-5 shrink-0 border-b border-slate-200/60 bg-white/60 backdrop-blur-md z-10 sticky top-0 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-purple-600/20">
-              <Layers className="w-5 h-5 text-white" />
+        <div className="px-8 py-5 shrink-0 border-b border-slate-200/60 bg-white/60 backdrop-blur-md z-10 sticky top-0 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shrink-0 shadow-lg shadow-violet-500/20">
+              <Layers className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h4 className="text-xl font-bold font-sans text-slate-800 tracking-tight">FORS Explorer</h4>
+              <h4 className="text-sm font-black font-sans text-slate-800 tracking-tight">FORS <span className="text-violet-600">Explorer</span></h4>
               <div className="flex items-center gap-2 mt-0.5">
-                <p className="text-xs font-normal text-slate-400">Everything connected, Browse Transactions.</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Transaction Engine</p>
                 <div className="w-1 h-1 rounded-full bg-slate-300" />
-                <p className="text-xs font-bold text-purple-600">{txns.length} transactions total</p>
+                <p className="text-[10px] font-black text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-100 uppercase tracking-widest">{txns.length}</p>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <LayoutToggle layout={layout} onChange={onLayoutChange} />
+            <button
+              onClick={() => { setExportMode(!exportMode); setSelectedForExport(new Set()); }}
+              className={clsx(
+                "flex items-center gap-2 px-3 py-2 border rounded-xl text-[10px] font-black uppercase transition-all",
+                exportMode ? "bg-purple-600 border-purple-600 text-white shadow-lg shadow-purple-500/20" : "bg-white border-slate-200 text-slate-600 hover:border-purple-400"
+              )}
+            >
+              <CheckSquare className="w-3.5 h-3.5" /> {exportMode ? "Exit Selection" : "Select to Export"}
+            </button>
+
+            {(!exportMode || selectedForExport.size > 0) && (
+              <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shrink-0">
+                <button
+                  onClick={() => {
+                    const rows = [["ID", "Name", "Type", "Language", "Linked Tables", "Internal Programs", "Description", "SQL Source"]];
+                    chosen.forEach(t => rows.push([t.id, t.name, t.pgmType || "", t.language || "", t.tables || "", t.pgms || "", t.description || "", t.sqlPg || ""]));
+                    const blob = new Blob([rows.map(r => r.map(escapeCSV).join(",")).join("\n")], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a"); a.href = url; a.download = `fors_transaction_registry_${Date.now()}.csv`; a.click();
+                  }}
+                  className="px-3 py-2 text-[10px] font-black text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all border-r border-slate-100"
+                >
+                  CSV {exportMode && `(${selectedForExport.size})`}
+                </button>
+                <button
+                  onClick={() => {
+                    const win = window.open("", "_blank");
+                    if (!win) return;
+                    win.document.write(`<html><head><title>FORS Transaction Registry</title><style>body{font-family:sans-serif;padding:40px;color:#334155}h2{color:#7c3aed;margin-top:30px;border-bottom:1px solid #ddd;padding-bottom:5px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #e2e8f0;padding:10px;text-align:left;font-size:12px}th{background:#f8fafc;font-weight:900;text-transform:uppercase;font-size:10px}pre{background:#f1f5f9;padding:15px;border-radius:8px;font-size:11px;color:#0f172a;white-space:pre-wrap;border-left:4px solid #7c3aed}</style></head><body><h1>FORS Transaction Dependency Report</h1><p style="font-size:12px;color:#64748b">Generated: ${new Date().toLocaleString()}</p>${chosen.map(t => `<div><h2>${t.name} <small style="font-size:10px;font-weight:400;color:#666">(${t.pgmType} / ${t.language})</small></h2><p style="font-size:12px;color:#475569">${t.description || "No description provided."}</p><p style="font-size:11px"><b>Linked Tables:</b> ${t.tables || "None"} <br> <b>Sub-Programs:</b> ${t.pgms || "None"}</p><h3>SQL Profile</h3><pre>${t.sqlPg || "-- No SQL available"}</pre></div>`).join('<hr style="margin:40px 0;border:0;border-top:1px dashed #ccc">')}</body></html>`);
+                    win.document.close(); win.print();
+                  }}
+                  className="px-3 py-2 text-[10px] font-black text-slate-600 hover:text-red-600 hover:bg-slate-50 transition-all"
+                >
+                  PDF {exportMode && `(${selectedForExport.size})`}
+                </button>
+              </div>
+            )}
             <div className="w-72 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
-                type="text" placeholder="Search transactions..."
+                type="text" placeholder="Search programs..."
                 value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-purple-500/20 transition-all"
+                className="w-full bg-slate-100 border-none rounded-xl pl-9 pr-4 py-2 text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-slate-400"
               />
             </div>
             {headerAction}
           </div>
         </div>
+
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-          <div className="space-y-3">
-            {txns.map(t => (
-              <div
-                key={t.id}
-                onClick={() => onSelectTxn(t)}
-                className={clsx(
-                  "group cursor-pointer bg-white rounded-2xl border-2 p-5 transition-all hover:shadow-lg hover:-translate-y-0.5 flex items-start gap-5",
-                  selectedTxn?.id === t.id ? "border-purple-500 shadow-md shadow-purple-500/10" : "border-slate-100 hover:border-slate-300"
-                )}
-              >
-                <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center shrink-0 border border-purple-100">
-                  <FileCode className="w-5 h-5 text-purple-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-black text-slate-800 truncate group-hover:text-purple-700 transition-colors">{t.name}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{t.description}</p>
-                  <div className="flex gap-2 mt-2">
-                    {t.pgmType && <span className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border border-slate-200">{t.pgmType}</span>}
-                    {t.language && <span className="bg-blue-50 text-blue-500 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border border-blue-100">{t.language}</span>}
-                    <span className="text-[9px] text-slate-400 font-medium mt-0.5">{t.tables?.split(",").filter(Boolean).length ?? 0} tables</span>
+          {layout === "grid" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {txns.map(t => {
+                const isSelExport = selectedForExport.has(t.id);
+                const isSelected = selectedTxn?.id === t.id;
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => exportMode ? toggleSelect(t.id) : onSelectTxn(t)}
+                    className={clsx(
+                      "group cursor-pointer bg-white rounded-2xl border-2 p-4 transition-all hover:shadow-xl hover:-translate-y-1 flex flex-col relative overflow-hidden",
+                      isSelected ? "border-purple-500 shadow-lg shadow-purple-500/10" : "border-slate-100 hover:border-slate-200",
+                      exportMode && isSelExport && "border-purple-300 bg-purple-50/30"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0 border border-purple-100 transition-colors group-hover:bg-purple-100">
+                        <FileCode className="w-5 h-5 text-purple-600" />
+                      </div>
+                      {exportMode && (
+                        <div className={clsx(
+                          "w-5 h-5 rounded-full border flex items-center justify-center shadow-sm transition-all",
+                          isSelExport ? "bg-purple-600 border-purple-600 text-white" : "bg-white border-slate-200"
+                        )}>
+                          {isSelExport && <CheckSquare className="w-3 h-3" />}
+                        </div>
+                      )}
+                      {!exportMode && <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-purple-500 transition-all" />}
+                    </div>
+                    
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-black text-slate-800 text-[13px] tracking-tight truncate group-hover:text-purple-700 transition-colors uppercase">{t.name}</h3>
+                      <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed font-medium">{t.description || "System transaction profile."}</p>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-50 flex flex-wrap gap-2">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 border border-slate-200 px-2 py-0.5 rounded bg-slate-50">{t.pgmType}</span>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-blue-500 border border-blue-100 px-2 py-0.5 rounded bg-blue-50">{t.language}</span>
+                    </div>
                   </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-purple-500 group-hover:translate-x-1 transition-all mt-1 shrink-0" />
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-2 max-w-5xl">
+              {txns.map(t => {
+                const isSelected = selectedTxn?.id === t.id;
+                const isSelExport = selectedForExport.has(t.id);
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => exportMode ? toggleSelect(t.id) : onSelectTxn(t)}
+                    className={clsx(
+                      "flex items-center gap-4 px-5 py-2.5 rounded-xl border transition-all cursor-pointer group",
+                      isSelected
+                        ? "bg-purple-50 border-purple-200 shadow-sm"
+                        : exportMode && isSelExport
+                          ? "bg-purple-50/50 border-purple-300 shadow-sm"
+                          : "bg-white border-slate-100 hover:border-slate-300"
+                    )}
+                  >
+                    {exportMode && (
+                      <div className={clsx(
+                        "w-5 h-5 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all",
+                        isSelExport ? "bg-purple-600 border-purple-600 text-white" : "border-slate-200 bg-white"
+                      )}>
+                        {isSelExport && <CheckSquare className="w-3.5 h-3.5" />}
+                      </div>
+                    )}
+                    <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", isSelected ? "bg-purple-100" : "bg-slate-50")}>
+                      <FileCode className={clsx("w-3.5 h-3.5", isSelected ? "text-purple-600" : "text-slate-400")} />
+                    </div>
+                    <div className="w-32 sm:w-40 shrink-0 min-w-0">
+                      <p className={clsx("text-[12px] font-black font-mono truncate", isSelected ? "text-purple-700" : "text-slate-700")}>{t.name}</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-slate-500 font-medium truncate">{t.description || "System transaction profile."}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded bg-slate-50">{t.pgmType}</span>
+                      <span className="text-[8px] font-black uppercase tracking-widest text-blue-400 border border-blue-100 px-1.5 py-0.5 rounded bg-blue-50">{t.language}</span>
+                    </div>
+                    <ChevronRight className={clsx("w-4 h-4 transition-all", isSelected ? "text-purple-500 translate-x-1" : "text-slate-300 group-hover:text-slate-500")} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Detail Panel */}
       {selectedTxn && (
         <div className="w-[460px] border-l border-slate-200 bg-white shadow-[-10px_0_30px_rgba(0,0,0,0.05)] flex flex-col shrink-0 overflow-hidden">
           <TxnDetailPanel txn={selectedTxn} onClose={() => onSelectTxn(null)} onJumpToTable={onJumpToTable} />
@@ -1429,7 +1699,7 @@ function escapeCSV(v: unknown): string {
 function TablesView({
   filteredTables, searchTableQuery, setSearchTableQuery,
   selectedTable, handleTableSelect, tableFields, loadingFields,
-  tableTxns, loadingTxns, selectedTxn, onSelectTxn, onClose, onJumpToTable, headerAction
+  tableTxns, loadingTxns, selectedTxn, onSelectTxn, onClose, onJumpToTable, headerAction, layout, onLayoutChange
 }: any) {
   const [exportMode, setExportMode] = useState(false);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set());
@@ -1490,31 +1760,32 @@ function TablesView({
     <div className="flex-1 flex overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Page header */}
-        <div className="px-8 pt-8 pb-5 shrink-0 border-b border-slate-200/60 bg-white/60 backdrop-blur-md z-10 sticky top-0">
+        <div className="px-8 py-5 shrink-0 border-b border-slate-200/60 bg-white/60 backdrop-blur-md z-10 sticky top-0">
           <div className="flex items-center justify-between gap-4">
             {/* Title block */}
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/20">
-                <Layout className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-sky-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
+                <Table2 className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h4 className="text-xl font-bold font-sans text-slate-800 tracking-tight">FORS Explorer</h4>
+                <h4 className="text-sm font-black font-sans text-slate-800 tracking-tight">FORS <span className="text-indigo-600">Explorer</span></h4>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xs font-normal text-slate-400">Everything connected, Browse Tables.</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Data Dictionary</p>
                   <div className="w-1 h-1 rounded-full bg-slate-300" />
-                  <p className="text-xs font-bold text-indigo-600">{filteredTables.length} tables total</p>
+                  <p className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 uppercase tracking-widest">{filteredTables.length}</p>
                 </div>
               </div>
             </div>
 
             {/* Controls */}
             <div className="flex items-center gap-3 shrink-0">
+              <LayoutToggle layout={layout} onChange={onLayoutChange} />
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                 <input
-                  type="text" placeholder="Search everything..."
+                  type="text" placeholder="Search schema..."
                   value={searchTableQuery} onChange={e => setSearchTableQuery(e.target.value)}
-                  className="w-64 bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/20 transition-all"
+                  className="w-64 bg-slate-100 border-none rounded-xl pl-9 pr-4 py-2 text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
                 />
               </div>
 
@@ -1526,19 +1797,43 @@ function TablesView({
                   >
                     Select All
                   </button>
-                  <button
-                    onClick={downloadCSV}
-                    disabled={selectedForExport.size === 0 || exportingCSV}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    {exportingCSV ? "Exporting…" : `Download CSV (${selectedForExport.size})`}
-                  </button>
+                  <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shrink-0">
+                    <button
+                      onClick={downloadCSV}
+                      disabled={selectedForExport.size === 0 || exportingCSV}
+                      className="px-3 py-2 text-[10px] font-black text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all border-r border-slate-100 disabled:opacity-40"
+                    >
+                      CSV ({selectedForExport.size})
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const chosen = filteredTables.filter((t: any) => selectedForExport.has(t.id));
+                        const win = window.open("", "_blank");
+                        if (!win) return;
+                        let content = `<html><head><title>FORS Schema Report</title><style>body{font-family:sans-serif;padding:40px;color:#334155}h2{color:#4f46e5;margin-top:30px;border-bottom:2px solid #e2e8f0;padding-bottom:10px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #e2e8f0;padding:8px;text-align:left;font-size:11px}th{background:#f8fafc;font-weight:900;text-transform:uppercase;font-size:9px}section{margin-bottom:40px;page-break-inside:avoid}</style></head><body><h1>FORS Explorer: Database Schema Report</h1><p style="font-size:12px;color:#64748b">Comprehensive metadata registry generated: ${new Date().toLocaleString()}</p>`;
+                        for (const tbl of chosen) {
+                          const [fds, idxs] = await Promise.all([
+                            fetch(`/api/explorer/fields?tableId=${encodeURIComponent(tbl.id)}`).then(r => r.json()).catch(() => []),
+                            fetch(`/api/explorer/indexes?tableId=${encodeURIComponent(tbl.id)}`).then(r => r.json()).catch(() => [])
+                          ]);
+                          content += `<section><h2>Table: ${tbl.name}</h2><p style="font-size:12px;color:#475569">${tbl.description || "Core domain entity."}</p><div style="display:flex;gap:20px;font-size:10px;margin-bottom:10px"><span><b>Fields:</b> ${tbl.fieldCount}</span><span><b>Indexes:</b> ${tbl.indexCount}</span><span><b>Transactions:</b> ${tbl.txnCount}</span></div><h3>Fields</h3><table><thead><tr><th>Pos</th><th>Field</th><th>Type</th><th>Len</th><th>Null</th><th>Description</th></tr></thead><tbody>${fds.map((f: any) => `<tr><td>${f.position || "-"}</td><td><b>${f.name}</b></td><td>${f.type}</td><td>${f.length || "-"}</td><td>${f.nullable === false ? "N" : "Y"}</td><td>${f.description || "-"}</td></tr>`).join("")}</tbody></table>${idxs.length > 0 ? `<h3>Indexes</h3><table><thead><tr><th>Name</th><th>Fields</th><th>Unique</th><th>Description</th></tr></thead><tbody>${idxs.map((idx: any) => `<tr><td><b>${idx.name}</b></td><td>${idx.fields}</td><td>${idx.isUnique ? "Y" : "N"}</td><td>${idx.description || "-"}</td></tr>`).join("")}</tbody></table>` : ""}</section>`;
+                        }
+                        content += "</body></html>";
+                        win.document.write(content); win.document.close(); win.print();
+                        content += "</body></html>";
+                        win.document.write(content); win.document.close(); win.print();
+                      }}
+                      disabled={selectedForExport.size === 0}
+                      className="px-3 py-2 text-[10px] font-black text-slate-600 hover:text-red-600 hover:bg-slate-50 transition-all disabled:opacity-40"
+                    >
+                      PDF ({selectedForExport.size})
+                    </button>
+                  </div>
                   <button
                     onClick={cancelExport}
-                    className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-red-500 border border-slate-200 rounded-xl bg-white hover:bg-red-50 hover:border-red-200 transition-all"
+                    className="px-3 py-2 text-[10px] font-black text-slate-500 hover:text-red-500 border border-slate-200 rounded-xl bg-white hover:bg-red-50 hover:border-red-200 transition-all"
                   >
-                    Cancel
+                    CANCEL
                   </button>
                   {headerAction}
                 </div>
@@ -1569,18 +1864,64 @@ function TablesView({
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
-              {filteredTables.map((t: TableRecord) => (
-                <TableCard
-                  key={t.id}
-                  table={t}
-                  isSelected={selectedTable?.id === t.id}
-                  onClick={() => exportMode ? toggleExportSelect(t.id) : handleTableSelect(t)}
-                  exportMode={exportMode}
-                  exportSelected={selectedForExport.has(t.id)}
-                />
-              ))}
-            </div>
+            {layout === "grid" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
+                {filteredTables.map((t: TableRecord) => (
+                  <TableCard
+                    key={t.id}
+                    table={t}
+                    isSelected={selectedTable?.id === t.id}
+                    onClick={() => exportMode ? toggleExportSelect(t.id) : handleTableSelect(t)}
+                    exportMode={exportMode}
+                    exportSelected={selectedForExport.has(t.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2 max-w-5xl">
+                {filteredTables.map((t: TableRecord) => {
+                  const isSelected = selectedTable?.id === t.id;
+                  const isExpSelected = selectedForExport.has(t.id);
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => exportMode ? toggleExportSelect(t.id) : handleTableSelect(t)}
+                      className={clsx(
+                        "flex items-center gap-4 px-5 py-3 rounded-2xl border transition-all cursor-pointer group",
+                        isSelected
+                          ? "bg-indigo-50 border-indigo-200 shadow-sm"
+                          : exportMode && isExpSelected
+                            ? "bg-emerald-50 border-emerald-200"
+                            : "bg-white border-slate-100 hover:border-slate-300"
+                      )}
+                    >
+                      {exportMode && (
+                        <div className={clsx(
+                          "w-5 h-5 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all",
+                          isExpSelected ? "bg-emerald-500 border-emerald-500" : "border-slate-200 bg-white"
+                        )}>
+                          {isExpSelected && <CheckSquare className="w-3.5 h-3.5 text-white" />}
+                        </div>
+                      )}
+                      <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm bg-gradient-to-br", isSelected ? "from-indigo-500 to-sky-600" : "from-slate-100 to-slate-200")}>
+                        <Table2 className={clsx("w-4 h-4", isSelected ? "text-white" : "text-slate-400")} />
+                      </div>
+                      <div className="w-32 sm:w-48 shrink-0 min-w-0">
+                        <p className={clsx("text-[13px] font-black font-mono tracking-tight truncate", isSelected ? "text-indigo-700" : "text-slate-800")}>{t.name}</p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] text-slate-500 font-medium truncate">{t.description || "Data domain entity."}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded bg-slate-50">{t.fieldCount} fields</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-indigo-400 border border-indigo-100 px-1.5 py-0.5 rounded bg-indigo-50">{t.txnCount} programs</span>
+                      </div>
+                      <ChevronRight className={clsx("w-4 h-4 transition-all", isSelected ? "text-indigo-500 translate-x-1" : "text-slate-300 group-hover:text-slate-500")} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {selectedTable && !exportMode && (
@@ -1612,24 +1953,24 @@ function ModuleCard({ menu, isSelected, onClick }: { menu: Menu, isSelected: boo
     <div
       onClick={onClick}
       className={clsx(
-        "group cursor-pointer rounded-3xl bg-white border-2 p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-slate-300/50 hover:-translate-y-1 relative overflow-hidden",
-        isSelected ? "border-blue-500 shadow-xl shadow-blue-500/20" : "border-slate-100/80 shadow-md"
+        "group cursor-pointer rounded-3xl bg-white/70 backdrop-blur-md border border-white/60 p-6 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/20 hover:-translate-y-2 relative overflow-hidden",
+        isSelected ? "ring-2 ring-indigo-500 shadow-xl shadow-indigo-500/20 bg-white" : "hover:border-indigo-300"
       )}
     >
-      <div className={clsx("absolute top-0 left-0 w-full h-1 bg-gradient-to-r opacity-50 group-hover:opacity-100 transition-opacity", grad)} />
-      <div className="flex items-start justify-between mb-8">
-        <div className={clsx("w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br", grad)}>
-          <Layers className="w-6 h-6 text-white drop-shadow-md" />
+      <div className={clsx("absolute top-0 left-0 w-full h-1 bg-gradient-to-r opacity-40 group-hover:opacity-100 transition-opacity", grad)} />
+      <div className="flex items-start justify-between mb-6">
+        <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center shadow-md bg-gradient-to-br", grad)}>
+          <Layers className="w-5 h-5 text-white" />
         </div>
-        <div className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest border border-slate-200/50 flex items-center gap-1.5">
-          <Layers className="w-3.5 h-3.5" /> {menu.childCount} Sub
+        <div className="bg-slate-50 text-slate-400 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-100 flex items-center gap-1.5">
+          <Layers className="w-3 h-3" /> {menu.childCount} SUB
         </div>
       </div>
-      <h3 className="text-xl font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors leading-tight line-clamp-1">{menu.title}</h3>
-      <p className="text-sm text-slate-500 font-medium leading-relaxed line-clamp-2 min-h-[40px]">{menu.description || "No description available."}</p>
+      <h3 className="text-sm font-black text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors leading-tight truncate uppercase tracking-tight">{menu.title}</h3>
+      <p className="text-[11px] text-slate-500 font-medium leading-relaxed line-clamp-2 min-h-[32px]">{menu.description || "System architecture component."}</p>
       {isSelected && (
-        <div className="absolute bottom-4 right-4 animate-in fade-in zoom-in w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg">
-          <ChevronRight className="w-5 h-5" />
+        <div className="absolute bottom-4 right-4 animate-in fade-in zoom-in w-7 h-7 bg-indigo-500 text-white rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <ChevronRight className="w-4 h-4" />
         </div>
       )}
     </div>
@@ -1729,14 +2070,14 @@ function TableCard({
     <div
       onClick={onClick}
       className={clsx(
-        "group cursor-pointer rounded-3xl bg-white border-2 p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1 relative overflow-hidden",
+        "group cursor-pointer rounded-3xl bg-white/70 backdrop-blur-md border-2 p-6 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/20 hover:-translate-y-2 relative overflow-hidden",
         exportMode
           ? exportSelected
-            ? "border-indigo-500 shadow-xl shadow-indigo-500/20 bg-indigo-50/40"
-            : "border-slate-200 hover:border-indigo-300"
+            ? "border-indigo-500 shadow-xl shadow-indigo-500/20 bg-white"
+            : "border-white/60 hover:border-indigo-300"
           : isSelected
-            ? "border-indigo-500 shadow-xl shadow-indigo-500/20 bg-indigo-50/30"
-            : "border-slate-100 shadow-md"
+            ? "border-indigo-500 shadow-xl shadow-indigo-500/20 bg-white"
+            : "border-white/60 shadow-md"
       )}
     >
       {/* Export checkbox overlay */}
@@ -1749,23 +2090,23 @@ function TableCard({
       )}
       <div className="flex items-start justify-between mb-5">
         <div className={clsx(
-          "w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm",
+          "w-11 h-11 rounded-xl flex items-center justify-center transition-colors shadow-sm",
           (isSelected && !exportMode) ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-600 group-hover:bg-indigo-50 group-hover:text-indigo-600"
         )}>
           <Table2 className="w-5 h-5" />
         </div>
-        <span className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border border-slate-200">
-          {table.txnCount} Txns
+        <span className="bg-slate-50 text-slate-500 text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-slate-200">
+          {table.txnCount} TXNS
         </span>
       </div>
-      <h3 className="text-lg font-black text-slate-800 mb-2 font-mono tracking-tight group-hover:text-indigo-600 transition-colors">{table.name}</h3>
-      <p className="text-sm text-slate-500 font-medium leading-relaxed line-clamp-2 min-h-[40px] mb-6">{table.description || "No table description."}</p>
-      <div className="flex items-center gap-4 border-t border-slate-100 pt-4 mt-auto">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-          <Layout className="w-4 h-4 text-emerald-500" /> {table.fieldCount} Fields
+      <h3 className="text-[13px] font-black text-slate-800 mb-1.5 font-mono tracking-tight group-hover:text-indigo-600 transition-colors truncate">{table.name}</h3>
+      <p className="text-[11px] text-slate-500 font-medium leading-relaxed line-clamp-2 min-h-[32px] mb-4">{table.description || "No table description."}</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3 mt-auto">
+        <div className="flex items-center gap-1 text-[10px] font-black text-slate-600 uppercase tracking-tight">
+          <Layout className="w-3 h-3 text-emerald-500" /> {table.fieldCount} <span className="text-slate-400 font-bold ml-0.5">Fields</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-          <Tag className="w-4 h-4 text-orange-500" /> {table.indexCount} Indexes
+        <div className="flex items-center gap-1 text-[10px] font-black text-slate-600 uppercase tracking-tight">
+          <Tag className="w-3 h-3 text-orange-500" /> {table.indexCount} <span className="text-slate-400 font-bold ml-0.5">Ind</span>
         </div>
       </div>
     </div>
@@ -2005,13 +2346,47 @@ function FieldsBrowserView({ tables, headerAction, refreshVersion }: { tables: T
   }, [refreshVersion]);
 
   return (
-    <div className="flex-1 flex flex-col p-6 gap-6">
+    <div className="flex-1 flex flex-col p-6 gap-5">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">Database Fields</h3>
-          <p className="text-xs text-slate-400 mt-1">Browse field definitions across all registered tables</p>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+            <AlignLeft className="w-4 h-4 text-indigo-500" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-800 tracking-tight">Database Fields</h3>
+            <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">Global Field Registry</p>
+          </div>
         </div>
-        {headerAction}
+        <div className="flex items-center gap-3">
+          {selectedTableId && (
+            <div className="flex bg-white border border-indigo-200 rounded-xl overflow-hidden shrink-0">
+              <button
+                onClick={() => {
+                  const rows = [["Table", "Name", "Type", "Length", "Nullable", "Position", "Description"]];
+                  filteredFields.forEach(f => rows.push([selectedTable?.name || "", f.name, f.type, (f.length || "").toString(), f.nullable === false ? "NOT NULL" : "nullable", (f.position || "").toString(), f.description || ""]));
+                  const blob = new Blob([rows.map(r => r.map(escapeCSV).join(",")).join("\n")], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = `fors_fields_${selectedTable?.name}_detailed_${Date.now()}.csv`; a.click();
+                }}
+                className="px-3 py-2 text-[10px] font-black text-indigo-600 hover:bg-indigo-50 transition-all border-r border-indigo-100 flex items-center gap-1.5"
+              >
+                CSV
+              </button>
+              <button
+                onClick={() => {
+                  const win = window.open("", "_blank");
+                  if (!win) return;
+                  win.document.write(`<html><head><title>Field Definitions - ${selectedTable?.name}</title><style>body{font-family:sans-serif;padding:40px;color:#334155}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #e2e8f0;padding:10px;text-align:left;font-size:11px}th{background:#f8fafc;font-weight:900;text-transform:uppercase;font-size:9px;color:#4f46e5}b{color:#1e293b;font-family:monospace}</style></head><body><h1>Technical Dictionary: ${selectedTable?.name}</h1><p style="font-size:12px;color:#64748b">Full metadata dump generated on ${new Date().toLocaleString()}</p><table><thead><tr><th>Pos</th><th>Field Name</th><th>Data Type</th><th>Len</th><th>Constraints</th><th>Functional Description</th></tr></thead><tbody>${filteredFields.map(f => `<tr><td>${f.position || "-"}</td><td><b>${f.name}</b></td><td>${f.type}</td><td>${f.length || "-"}</td><td><small>${f.nullable === false ? "NOT NULL" : "NULL"}</small></td><td style="color:#64748b">${f.description || "-"}</td></tr>`).join("")}</tbody></table></body></html>`);
+                  win.document.close(); win.print();
+                }}
+                className="px-3 py-2 text-[10px] font-black text-indigo-600 hover:bg-indigo-50 transition-all flex items-center gap-1.5"
+              >
+                PDF
+              </button>
+            </div>
+          )}
+          {headerAction}
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -2062,7 +2437,7 @@ function FieldsBrowserView({ tables, headerAction, refreshVersion }: { tables: T
                   <p className="mt-1 font-black">{selectedTable.name}</p>
                 </div>
                 <div className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-emerald-700">
-                  {filteredFields.length} fields
+                  {filteredFields.length}
                 </div>
               </div>
             </div>
@@ -2115,13 +2490,47 @@ function IndexesBrowserView({ tables, headerAction, refreshVersion }: { tables: 
   }, [refreshVersion]);
 
   return (
-    <div className="flex-1 flex flex-col p-6 gap-6">
+    <div className="flex-1 flex flex-col p-6 gap-5">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">Database Indexes</h3>
-          <p className="text-xs text-slate-400 mt-1">Browse index definitions for performance optimization</p>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+            <Layers className="w-4 h-4 text-amber-500" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-800 tracking-tight">Database Indexes</h3>
+            <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">Performance Metadata</p>
+          </div>
         </div>
-        {headerAction}
+        <div className="flex items-center gap-3">
+          {selectedTableId && indexes.length > 0 && (
+            <div className="flex bg-white border border-amber-200 rounded-xl overflow-hidden shrink-0">
+              <button
+                onClick={() => {
+                  const rows = [["Table", "Index Name", "Fields", "Unique", "Description"]];
+                  indexes.forEach(idx => rows.push([selectedTable?.name || "", idx.name, idx.fields, idx.isUnique ? "UNIQUE" : "NON-UNIQUE", idx.description || ""]));
+                  const blob = new Blob([rows.map(r => r.map(escapeCSV).join(",")).join("\n")], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = `fors_indexes_${selectedTable?.name}_${Date.now()}.csv`; a.click();
+                }}
+                className="px-3 py-2 text-[10px] font-black text-amber-600 hover:bg-amber-50 transition-all border-r border-amber-100 flex items-center gap-1.5"
+              >
+                CSV
+              </button>
+              <button
+                onClick={() => {
+                  const win = window.open("", "_blank");
+                  if (!win) return;
+                  win.document.write(`<html><head><title>Table Indexes - ${selectedTable?.name}</title><style>body{font-family:sans-serif;padding:40px;color:#334155}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #e2e8f0;padding:12px;text-align:left;font-size:12px}th{background:#f8fafc;font-weight:900;text-transform:uppercase;font-size:10px}</style></head><body><h1>Table Indexes: ${selectedTable?.name}</h1><p>Generated: ${new Date().toLocaleString()}</p><table><thead><tr><th>Index Name</th><th>Fields</th><th>Unique</th><th>Description</th></tr></thead><tbody>${indexes.map(idx => `<tr><td><b>${idx.name}</b></td><td>${idx.fields}</td><td>${idx.isUnique ? "Y" : "N"}</td><td>${idx.description || "-"}</td></tr>`).join("")}</tbody></table></body></html>`);
+                  win.document.close(); win.print();
+                }}
+                className="px-3 py-2 text-[10px] font-black text-amber-600 hover:bg-amber-50 transition-all flex items-center gap-1.5"
+              >
+                PDF
+              </button>
+            </div>
+          )}
+          {headerAction}
+        </div>
       </div>
 
       <select
@@ -2158,7 +2567,7 @@ function IndexesBrowserView({ tables, headerAction, refreshVersion }: { tables: 
                   <p className="mt-1 font-black text-slate-900">{selectedTable.name}</p>
                 </div>
                 <div className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-amber-700">
-                  {indexes.length} indexes
+                  {indexes.length}
                 </div>
               </div>
             </div>

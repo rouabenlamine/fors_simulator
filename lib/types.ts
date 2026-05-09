@@ -4,6 +4,7 @@ export interface User {
   matricule: string;
   name: string;
   surname: string;
+  email?: string;
   role: UserRole;
   permissions?: any; // JSON limits payload for Admins
 }
@@ -43,7 +44,7 @@ export interface TicketAnalysis {
   recommendation: string;
   sqlProposal?: string;
   sqlApprovedBy?: string;
-  gostSummary: string;
+  agentSummary: string;
   urgency: "critical" | "high" | "medium" | "low";
 }
 

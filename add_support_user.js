@@ -10,7 +10,7 @@ async function main() {
     try {
         await conn.query("DELETE FROM users WHERE matricule = 'SUP001'");
         await conn.query(`
-            INSERT INTO users (matricule, name, prenom, username, email, role, password, is_active) 
+            INSERT INTO users (matricule, name, surname, username, email, role, password, is_active) 
             VALUES ('SUP001', 'Support', 'Agent', 'support_agent', 'support@test.com', 'it_support', 'fors2025', 1)
         `);
         console.log("Added it_support user: SUP001 / fors2025");

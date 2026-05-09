@@ -30,14 +30,14 @@ async function createCoreAdmins() {
 
     // Create Admin
     await pool.query(`
-      INSERT INTO users (matricule, name, prenom, email, password, role, is_active)
+      INSERT INTO users (matricule, name, surname, email, password, role, is_active)
       VALUES (?, ?, ?, ?, ?, ?, 1)
       ON DUPLICATE KEY UPDATE password = VALUES(password), role = VALUES(role)
     `, ['ADMIN01', 'System', 'Admin', 'admin@example.com', adminHash, 'admin']);
 
     // Create Superadmin
     await pool.query(`
-      INSERT INTO users (matricule, name, prenom, email, password, role, is_active)
+      INSERT INTO users (matricule, name, surname, email, password, role, is_active)
       VALUES (?, ?, ?, ?, ?, ?, 1)
       ON DUPLICATE KEY UPDATE password = VALUES(password), role = VALUES(role)
     `, ['SUPER01', 'Global', 'Superadmin', 'super@example.com', superadminHash, 'superadmin']);

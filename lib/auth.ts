@@ -17,9 +17,9 @@ export async function getSession(): Promise<SessionData> {
     return { isLoggedIn: false };
   }
 
-  // Look up session in DB
+  // Look up session in DB (including expired ones to verify and delete if needed)
   const sessions = await query<any>(
-    "SELECT s.*, u.name, u.prenom, u.role FROM sessions s JOIN users u ON s.user_matricule = u.matricule WHERE s.token = ? AND s.expires_at > NOW()",
+    "SELECT s.*, u.name, u.surname, u.role, u.email FROM sessions s JOIN users u ON s.user_matricule = u.matricule WHERE s.token = ?",
     [token]
   );
 
@@ -28,6 +28,13 @@ export async function getSession(): Promise<SessionData> {
   }
 
   const s = sessions[0];
+
+  // Force logout and delete session if it has expired
+  if (new Date(s.expires_at).getTime() < Date.now()) {
+    await query("DELETE FROM sessions WHERE token = ?", [token]);
+    cookieStore.delete("fors-token");
+    return { isLoggedIn: false };
+  }
   let sessionRole = s.role;
   if (s.role === "user") sessionRole = "it_report";
   // 'it_support', 'it_manager', 'it_report', 'admin', 'superadmin' map to themselves
@@ -37,21 +44,41 @@ export async function getSession(): Promise<SessionData> {
     user: {
       matricule: s.user_matricule,
       name: s.name,
-      surname: s.prenom,
+      surname: s.surname,
       role: sessionRole,
+      email: s.email,
     }
   };
 }
 
 export async function createSession(user: User) {
-  const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-  const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
-  const expiresAtStr = expiresAt.toISOString().slice(0, 19).replace('T', ' ');
+  // General cleanup of old expired sessions for all users to keep DB slim
+  await query("DELETE FROM sessions WHERE expires_at < NOW()");
 
-  await query(
-    "INSERT INTO sessions (token, user_matricule, expires_at) VALUES (?, ?, ?)",
-    [token, user.matricule, expiresAtStr]
+  // Check for existing valid session
+  const existingSessions = await query<any[]>(
+    "SELECT token, expires_at FROM sessions WHERE user_matricule = ? AND expires_at > NOW() ORDER BY expires_at DESC LIMIT 1",
+    [user.matricule]
   );
+
+  let token: string;
+  let expiresAt: Date;
+
+  if (existingSessions && existingSessions.length > 0) {
+    // Reuse existing unexpired session
+    token = existingSessions[0].token;
+    expiresAt = new Date(existingSessions[0].expires_at);
+  } else {
+    // Create new session
+    token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
+    const expiresAtStr = expiresAt.toISOString().slice(0, 19).replace('T', ' ');
+
+    await query(
+      "INSERT INTO sessions (token, user_matricule, expires_at) VALUES (?, ?, ?)",
+      [token, user.matricule, expiresAtStr]
+    );
+  }
 
   const cookieStore = await cookies();
   cookieStore.set("fors-token", token, {
@@ -72,9 +99,6 @@ export async function createSession(user: User) {
     [user.matricule, "LOGIN", JSON.stringify({ message: `User ${user.matricule} logged in`, timestamp: new Date().toISOString() })]
   );
   revalidatePath("/activity");
-
-  // Cleanup old sessions on login to keep DB slim
-  await query("DELETE FROM sessions WHERE expires_at < NOW()");
 }
 
 export async function logout() {
@@ -123,7 +147,7 @@ export async function validateCredentials(
   password: string
 ): Promise<User | null> {
   const users = await query<any>(
-    "SELECT matricule, name, prenom, role, password FROM users WHERE matricule = ?",
+    "SELECT matricule, name, surname, role, email, password FROM users WHERE matricule = ?",
     [matricule]
   );
   if (users.length === 0) return null;
@@ -153,7 +177,8 @@ export async function validateCredentials(
   return {
     matricule: user.matricule,
     name: user.name,
-    surname: user.prenom,
+    surname: user.surname,
     role: mappedRole,
+    email: user.email,
   };
 }

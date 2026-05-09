@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { logActivity } from '@/lib/audit';
 import fs from 'fs';
 import path from 'path';
 
@@ -177,6 +178,12 @@ export async function POST(request: Request) {
         ];
 
         await query(q, values);
+        
+        // Log n8n insertion for notification center
+        await logActivity("XML_TICKET_IMPORTED", {
+            ticketId: incident_number,
+            details: { message: `n8n automated insertion of ticket ${incident_number}`, source: "n8n" }
+        });
 
         return NextResponse.json({
             success: true,
