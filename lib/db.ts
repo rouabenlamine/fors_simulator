@@ -74,10 +74,60 @@ export default pool;
 // Auto-migrate to ensure necessary tables exist
 (async () => {
     try {
-        // 1. impacted_tables column
+        // 1. impacted_tables & agent_summary columns
         try {
             await pool.query("ALTER TABLE ai_analysis ADD COLUMN impacted_tables TEXT");
-            console.log("[DB] Successfully added impacted_tables column to ai_analysis");
+        } catch (err: any) {
+            if (err.code !== "ER_DUP_FIELDNAME") { /* ignore */ }
+        }
+        try {
+            await pool.query("ALTER TABLE ai_analysis ADD COLUMN agent_summary TEXT");
+        } catch (err: any) {
+            if (err.code !== "ER_DUP_FIELDNAME") { /* ignore */ }
+        }
+        try {
+            await pool.query("ALTER TABLE ai_analysis ADD COLUMN confidence_score DOUBLE DEFAULT 0");
+        } catch (err: any) {
+            if (err.code !== "ER_DUP_FIELDNAME") { /* ignore */ }
+        }
+        console.log("[DB] Successfully verified impacted_tables, agent_summary & confidence_score columns in ai_analysis");
+
+        // 1b. assigned_support_matricule — stores the FORS matricule of the IT support
+        //     user responsible for this ticket (mapped from ServiceNow assigned_to).
+        try {
+            await pool.query("ALTER TABLE tickets ADD COLUMN assigned_support_matricule VARCHAR(50) NULL DEFAULT NULL");
+            console.log("[DB] Successfully added assigned_support_matricule column to tickets");
+        } catch (err: any) {
+            if (err.code !== "ER_DUP_FIELDNAME") { /* ignore */ }
+        }
+
+        // 1b-fix. Drop any foreign key constraint on assigned_support_matricule.
+        // A FK here causes the ENTIRE ticket INSERT to crash if the matricule
+        // doesn't exist in the users table — we handle validation in application code instead.
+        try {
+            const [fks] = await pool.query(`
+                SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'tickets'
+                  AND COLUMN_NAME = 'assigned_support_matricule'
+                  AND REFERENCED_TABLE_NAME IS NOT NULL
+            `);
+            for (const fk of (fks as any[])) {
+                await pool.query(`ALTER TABLE tickets DROP FOREIGN KEY ${fk.CONSTRAINT_NAME}`);
+                console.log(`[DB] Dropped FK constraint "${fk.CONSTRAINT_NAME}" on assigned_support_matricule`);
+            }
+        } catch (err: any) {
+            // Ignore — no FK to drop
+        }
+
+        // 1c. urgency and watch_list from new n8n payload
+        try {
+            await pool.query("ALTER TABLE tickets ADD COLUMN urgency VARCHAR(50) NULL DEFAULT NULL");
+        } catch (err: any) {
+            if (err.code !== "ER_DUP_FIELDNAME") { /* ignore */ }
+        }
+        try {
+            await pool.query("ALTER TABLE tickets ADD COLUMN watch_list TEXT NULL DEFAULT NULL");
         } catch (err: any) {
             if (err.code !== "ER_DUP_FIELDNAME") { /* ignore */ }
         }

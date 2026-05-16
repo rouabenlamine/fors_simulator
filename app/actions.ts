@@ -3,14 +3,19 @@
 import { query, execute, transaction, generateId } from "@/lib/db";
 import { Ticket, TicketAnalysis, ChatMessage, KPI, ActivityLog, User } from "@/lib/types";
 import { generateAnalysisWithOllama, getAgentChatResponse } from "@/lib/ai";
-import { getSession } from "@/lib/auth";
+import { getSession as getSessionInternal } from "@/lib/auth";
+export async function getSession() {
+  return await getSessionInternal();
+}
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/audit";
+import { canActOnTicket, getTicketAuthContext } from "@/lib/ticket-auth";
 
 
-export async function getTickets(): Promise<Ticket[]> {
+export async function getTickets(scope: 'all' | 'workspace' = 'all'): Promise<Ticket[]> {
   const session = await getSession();
   const role = session.user?.role;
+  const matricule = session.user?.matricule;
   
   let q = `
     SELECT 
@@ -22,6 +27,7 @@ export async function getTickets(): Promise<Ticket[]> {
       t.sys_class_name as sysClassName,
       t.assignment_group as team,
       t.assigned_to as assignedTo,
+      t.assigned_support_matricule as assignedSupportMatricule,
       t.sys_created_on as createdAt,
       t.sys_updated_on as updatedAt,
       t.opened_by as openedBy,
@@ -31,12 +37,20 @@ export async function getTickets(): Promise<Ticket[]> {
       t.business_service as businessService,
       t.close_notes as closeNotes,
       t.comments as comments,
-      a.confidence_score * 100 as confidence
+      a.confidence_score * 100 as confidence,
+      a.agent_summary as agentSummary
     FROM tickets t
     LEFT JOIN ai_analysis a ON t.number = a.incident_number
   `;
   const params: any[] = [];
-  if (role === "it_manager") {
+
+  if (role === "it_support" && scope === "workspace") {
+    // Analysis Workspace: IT Support agents only see tickets assigned to them
+    // that are in New or Analysis Pending state
+    q += " WHERE t.state IN ('New', 'Analysis Pending') AND t.assigned_support_matricule = ?";
+    params.push(matricule);
+  } else if (role === "it_manager") {
+    // IT Manager sees all team tickets
     q += " WHERE t.assignment_group = 'IT Support'";
   }
 
@@ -67,7 +81,8 @@ export async function getTicketById(id: string): Promise<Ticket | null> {
       priority, 
       sys_class_name as sysClassName,
       assignment_group as team, 
-      assigned_to as assignedTo, 
+      assigned_to as assignedTo,
+      assigned_support_matricule as assignedSupportMatricule,
       sys_created_on as createdAt, 
       sys_updated_on as updatedAt, 
       opened_by as openedBy,
@@ -77,7 +92,8 @@ export async function getTicketById(id: string): Promise<Ticket | null> {
       t.business_service as businessService,
       t.close_notes as closeNotes,
       t.comments as comments,
-      a.confidence_score * 100 as confidence
+      a.confidence_score * 100 as confidence,
+      a.agent_summary as agentSummary
     FROM tickets t
     LEFT JOIN ai_analysis a ON t.number = a.incident_number
     WHERE t.number = ?
@@ -97,6 +113,15 @@ export async function getTicketById(id: string): Promise<Ticket | null> {
     aiConfidence: r.confidence,
   };
   return JSON.parse(JSON.stringify(data));
+}
+
+/**
+ * Server Action wrapper — safe to call from Client Components.
+ * Returns the auth context for a given ticket so the UI can conditionally
+ * render action buttons as enabled or disabled.
+ */
+export async function getTicketAuthContextAction(ticketId: string) {
+  return getTicketAuthContext(ticketId);
 }
 
 export async function getAnalyses(): Promise<TicketAnalysis[]> {
@@ -156,6 +181,16 @@ export async function getConversations() {
  * Used by the Chat History sidebar to render conversation cards.
  */
 export async function getConversationsWithMeta() {
+  const session = await getSession();
+  const role = session.user?.role;
+  const matricule = session.user?.matricule;
+
+  // IT Support agents only see their own conversations
+  const whereClause = (role === "it_support" && matricule)
+    ? "WHERE c.user_matricule = ?"
+    : "";
+  const params = (role === "it_support" && matricule) ? [matricule] : [];
+
   const rows = await query<any>(`
     SELECT
       c.conversation_id AS conversationId,
@@ -181,29 +216,41 @@ export async function getConversationsWithMeta() {
       ) AS lastMessageAt
     FROM conversations c
     LEFT JOIN messages m ON m.conversation_id = c.conversation_id
+    ${whereClause}
     GROUP BY c.conversation_id
     ORDER BY COALESCE((
       SELECT MAX(m3.created_at) FROM messages m3 WHERE m3.conversation_id = c.conversation_id
     ), c.created_at) DESC
-  `);
+  `, params);
   return JSON.parse(JSON.stringify(rows));
 }
 
 export async function getChatMessages(): Promise<ChatMessage[]> {
+  const session = await getSession();
+  const role = session.user?.role;
+  const matricule = session.user?.matricule;
+
+  // IT Support agents only see messages from their own conversations
+  const whereClause = (role === "it_support" && matricule)
+    ? "WHERE c.user_matricule = ?"
+    : "";
+  const params = (role === "it_support" && matricule) ? [matricule] : [];
+
   const qStr = `
     SELECT m.id, m.conversation_id as conversationId, m.role, m.content, m.created_at as createdAt, c.ticket_number as ticketId, m.user_matricule as senderName
     FROM messages m
     JOIN conversations c ON m.conversation_id = c.conversation_id
+    ${whereClause}
   `;
-  const rows = await query<any>(qStr);
+  const rows = await query<any>(qStr, params);
   const data = rows.map((r: any) => ({
     id: r.id.toString(),
     conversationId: r.conversationId,
-    ticketId: r.ticketId, // keep for UI backwards compatibility if needed
+    ticketId: r.ticketId,
     role: r.role,
     content: r.content,
     createdAt: r.createdAt,
-    senderName: r.role === 'AI' ? 'FORS Agent' : r.senderName
+    senderName: r.role === 'AI' ? 'FORS Assistant' : r.senderName
   }));
   return JSON.parse(JSON.stringify(data));
 }
@@ -257,25 +304,25 @@ export async function getActivities(): Promise<ActivityLog[]> {
       }
     }
 
-    let q = "SELECT * FROM audit_logs";
+    let q = "SELECT a.*, u.name, u.surname FROM audit_logs a LEFT JOIN users u ON a.user_matricule = u.matricule";
     const params: any[] = [];
     const conditions: string[] = [];
 
     if (role === "it_manager") {
       // Filter for IT Support related logs
-      conditions.push(`(user_matricule IN (SELECT matricule FROM users WHERE role = 'it_support')
-           OR details LIKE '%"team":"IT Support"%'
-           OR details LIKE '%IT Support%')`);
+      conditions.push(`(a.user_matricule IN (SELECT matricule FROM users WHERE role = 'it_support')
+           OR a.details LIKE '%"team":"IT Support"%'
+           OR a.details LIKE '%IT Support%')`);
     } else if (role === "admin") {
       // Admin sees everything except superadmin logs
-      conditions.push("user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')");
+      conditions.push("a.user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')");
     }
 
     if (conditions.length > 0) {
       q += " WHERE " + conditions.join(" AND ");
     }
 
-    q += " ORDER BY created_at DESC LIMIT 50";
+    q += " ORDER BY a.created_at DESC LIMIT 50";
     const rows = await query<any>(q, params);
     console.log("[getActivities] Fetched rows count:", rows.length);
 
@@ -298,11 +345,13 @@ export async function getActivities(): Promise<ActivityLog[]> {
         console.error("[getActivities] details parse error for row id", r.id, e);
       }
 
+      const fullName = (r.name && r.surname) ? `${r.name} ${r.surname}` : r.user_matricule;
+
       return {
         id: (r.id || r.ID || Math.random()).toString(),
         action: r.action || "UNKNOWN",
         ticketId: tId,
-        performedBy: r.user_matricule || "System",
+        performedBy: fullName || "System",
         timestamp: r.created_at || new Date().toISOString(),
         details: r.details || ""
       };
@@ -438,23 +487,25 @@ export async function analyzeTicketAction(ticketId: string, title: string, descr
   // Auto-migrate if needed
   try {
     await execute("ALTER TABLE ai_analysis ADD COLUMN impacted_tables TEXT");
-    console.log("Migration: added impacted_tables to ai_analysis");
+    await execute("ALTER TABLE ai_analysis ADD COLUMN agent_summary TEXT");
+    console.log("Migration: added impacted_tables and agent_summary to ai_analysis");
   } catch (e: any) {
-    // Column likely already exists
+    // Columns likely already exist
   }
 
   // Save to DB
   try {
     await execute(`
-      INSERT INTO ai_analysis (incident_number, incident_description, root_cause, resolution_steps, suggested_sql, confidence_score, impacted_tables)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO ai_analysis (incident_number, incident_description, root_cause, resolution_steps, suggested_sql, confidence_score, impacted_tables, agent_summary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         incident_description = VALUES(incident_description),
         root_cause = VALUES(root_cause),
         resolution_steps = VALUES(resolution_steps),
         suggested_sql = VALUES(suggested_sql),
         confidence_score = VALUES(confidence_score),
-        impacted_tables = VALUES(impacted_tables)
+        impacted_tables = VALUES(impacted_tables),
+        agent_summary = VALUES(agent_summary)
     `, [
       ticketId,
       description,
@@ -462,11 +513,12 @@ export async function analyzeTicketAction(ticketId: string, title: string, descr
       JSON.stringify(analysis.recommendation),
       analysis.sqlProposal,
       analysis.confidence / 100,
-      JSON.stringify(analysis.impactedTables || [])
+      JSON.stringify(analysis.impactedTables || []),
+      analysis.agentSummary || ""
     ]);
 
     const impactedTablesStr = analysis.impactedTables?.map((t: any) => t.name).join(", ") || "None identified";
-    const ghostResponseText = `FORS AGENT RESPONSE (PENDING):
+    const ghostResponseText = `FORS ASSISTANT RESPONSE (PENDING):
 
 Root Cause Analysis:
 ${analysis.rootCause}
@@ -508,13 +560,17 @@ ${analysis.confidence}%`;
   return JSON.parse(JSON.stringify(analysis));
 }
 
-export async function chatWithAgentAction(ticketId: string, message: string, history: any[] = []) {
+export async function chatWithAssistantAction(ticketId: string, message: string, history: any[] = []) {
   const sessionValue = await getSession();
   const userMatricule = sessionValue.user?.matricule || "UNKNOWN";
 
-  // Find or create Conversation
-  let conversationId = ticketId + "_conv";
-  const convRows = await query<any>("SELECT conversation_id FROM conversations WHERE ticket_number = ?", [ticketId]);
+  // Find or create Conversation — scoped to the current user
+  // Each agent gets their own private conversation per ticket
+  let conversationId = `${ticketId}_${userMatricule}`;
+  const convRows = await query<any>(
+    "SELECT conversation_id FROM conversations WHERE ticket_number = ? AND user_matricule = ?",
+    [ticketId, userMatricule]
+  );
   if (convRows.length > 0) {
     conversationId = convRows[0].conversation_id;
   } else {
@@ -540,7 +596,7 @@ export async function chatWithAgentAction(ticketId: string, message: string, his
     console.error("Failed to save user chat:", err);
   }
 
-  // Fetch the full ticket + its AI analysis to give FORS Agent strict context
+  // Fetch the full ticket + its AI analysis to give FORS Assistant strict context
   const [ticketRow] = await query<any>(
     `SELECT t.number, t.short_description, t.description, t.state, t.priority,
             t.assignment_group, t.assigned_to, t.comments,
@@ -590,7 +646,7 @@ export async function getChatMessagesForTicketAction(ticketId: string): Promise<
     role: r.role,
     content: r.content,
     createdAt: r.createdAt,
-    senderName: r.role === 'AI' ? 'FORS Agent' : (r.senderName || 'Agent')
+    senderName: r.role === 'AI' ? 'FORS Assistant' : (r.senderName || 'Agent')
   }));
   return JSON.parse(JSON.stringify(data));
 }
@@ -644,8 +700,12 @@ export async function deleteConversationAction(conversationId: string) {
 }
 
 export async function validateAnalysisAction(ticketId: string, currentAnalysis?: any) {
-  const session = await getSession();
-  const userMatricule = session.user?.matricule || "UNKNOWN";
+  // ── Authorization check ───────────────────────────────────────────────────
+  const authResult = await canActOnTicket(ticketId);
+  if (!authResult.allowed) {
+    return { success: false, error: authResult.reason };
+  }
+  const userMatricule = authResult.userMatricule;
 
   // 0. Pre-flight checks (outside transaction – read-only)
   const [ticket] = await query<any>("SELECT state, description FROM tickets WHERE number = ?", [ticketId]);
@@ -751,8 +811,12 @@ export async function validateAnalysisAction(ticketId: string, currentAnalysis?:
 
 export async function rejectAnalysisAction(ticketId: string, reason: string = ""): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await getSession();
-    const userMatricule = session.user?.matricule || "UNKNOWN";
+    // ── Authorization check ─────────────────────────────────────────────────
+    const authResult = await canActOnTicket(ticketId);
+    if (!authResult.allowed) {
+      return { success: false, error: authResult.reason };
+    }
+    const userMatricule = authResult.userMatricule;
 
     await query("UPDATE tickets SET state = 'Rejected', comments = ? WHERE number = ?", [
       `AI solution rejected by ${userMatricule}. Reason: ${reason}`,
@@ -793,7 +857,7 @@ export async function cleanupOldDataAction() {
  * Logs a SQL execution event. 
  * This is called from the UI when a user runs a suggested or manual query.
  */
-export async function logSqlExecutionAction(ticketId: string, sql: string, status: "success" | "error" = "success") {
+export async function logSqlExecutionAction(ticketId: string, sql: string, status: "success" | "error" | "success (simulated)" = "success") {
   const session = await getSession();
   const userMatricule = session.user?.matricule || "UNKNOWN";
 
@@ -906,6 +970,24 @@ export async function createTicketFromXmlAction(dbFields: Record<string, string 
   ];
 
   await query(q, values);
+
+  // ── Resolve assigned_to → FORS support user matricule ─────────────────────
+  if (dbFields.assigned_to) {
+    try {
+      const supportUsers = await query<any>(
+        "SELECT matricule FROM users WHERE matricule = ? AND role = 'it_support' LIMIT 1",
+        [dbFields.assigned_to.trim()]
+      );
+      if (supportUsers.length > 0) {
+        await query(
+          "UPDATE tickets SET assigned_support_matricule = ? WHERE number = ?",
+          [supportUsers[0].matricule, dbFields.number]
+        );
+      }
+    } catch (mapErr: any) {
+      console.error("[createTicketFromXmlAction] Failed to map assigned_support_matricule:", mapErr.message);
+    }
+  }
 
   // Audit trail
   await logActivity("XML_TICKET_IMPORTED", {
@@ -1299,8 +1381,12 @@ export async function updateTicketSapModuleAction(ticketId: string, sapModule: s
 }
 
 export async function updateTicketStatusAction(ticketId: string, status: string) {
-  const session = await getSession();
-  const userMatricule = session.user?.matricule || "SYSTEM";
+  // ── Authorization check ───────────────────────────────────────────────────
+  const authResult = await canActOnTicket(ticketId);
+  if (!authResult.allowed) {
+    return { success: false, error: authResult.reason };
+  }
+  const userMatricule = authResult.userMatricule;
 
   await query("UPDATE tickets SET state = ?, sys_updated_on = NOW() WHERE number = ?", [status, ticketId]);
 
@@ -1345,9 +1431,9 @@ export async function addTicketCommentAction(ticketId: string, comment: string) 
 export async function getNotificationsAction() {
   const q = `
     (SELECT 
-      'info' as type, 
-      CONCAT('AI Analysed: ', incident_number) as title, 
-      root_cause as message, 
+      'success' as type, 
+      CONCAT('Ticket Analysed: ', incident_number) as title, 
+      'The AI Agent has completed the analysis and proposed a solution.' as message, 
       created_at as timestamp,
       incident_number as linkId
     FROM ai_analysis 
@@ -1357,8 +1443,8 @@ export async function getNotificationsAction() {
     
     (SELECT 
       'alert' as type, 
-      CONCAT('n8n Incoming: ', number) as title, 
-      short_description as message, 
+      CONCAT('New Ticket Inserted: ', number) as title, 
+      CONCAT('Incoming n8n ticket: ', short_description) as message, 
       sys_created_on as timestamp,
       number as linkId
     FROM tickets
@@ -1407,11 +1493,10 @@ export async function getEventLogsForTicketAction(ticketId: string) {
  * Blocks DDL (DROP, ALTER, TRUNCATE, GRANT) for safety.
  */
 export async function executeSqlPreviewAction(ticketId: string, sql: string) {
-  // Auth check — wrapped so a session redirect doesn't silently crash the action
-  try {
-    await getSession();
-  } catch {
-    return { success: false, columns: [], rows: [], error: "Session expired or unauthorized. Please refresh and log in again." };
+  // ── Authorization check (SQL approval = resolution action) ────────────────
+  const authResult = await canActOnTicket(ticketId);
+  if (!authResult.allowed) {
+    return { success: false, columns: [], rows: [], error: authResult.reason };
   }
 
   // Guard: reject empty or whitespace-only SQL
@@ -1450,7 +1535,108 @@ export async function executeSqlPreviewAction(ticketId: string, sql: string) {
       error: null
     };
   } catch (err: any) {
+    // ── VIRTUAL TABLE INTERCEPTOR ───────────────────────────────────────────
+    // If the table doesn't physically exist in MySQL but IS documented in our
+    // `database_tables` catalog, we simulate a successful execution.
+    const match = err.message?.match(/Table '[^.]+\.([^']+)' doesn't exist/);
+    if (match) {
+      const tableName = match[1];
+      const [tableMeta] = await query<any>("SELECT name FROM database_tables WHERE name = ?", [tableName]);
+      
+      if (tableMeta) {
+        try { await logSqlExecutionAction(ticketId, trimmed, "success (simulated)"); } catch { }
+        
+        const isSelect = /^\s*select\b/i.test(trimmed);
+        if (isSelect) {
+          // Attempt to extract columns from the SELECT clause for a realistic mock
+          let columns = ['Status', 'Simulated_Table'];
+          let mockRow: any = { Status: 'Success', Simulated_Table: tableName };
+          
+          const selectMatch = trimmed.match(/^\s*select\s+(.+?)\s+from/i);
+          if (selectMatch && selectMatch[1].trim() !== '*') {
+            const parsedCols = selectMatch[1].split(',').map(c => {
+              // Extract the last word (handles aliases) and remove table prefixes (apag.zaeben -> zaeben)
+              let cName = c.trim().split(/\s+/).pop() || c.trim();
+              cName = cName.split('.').pop() || cName;
+              return cName.replace(/[`"']/g, '');
+            });
+            if (parsedCols.length > 0) {
+              columns = parsedCols;
+              mockRow = {};
+              parsedCols.forEach(c => { mockRow[c] = `[Simulated ${c}]`; });
+            }
+          }
+
+          return { 
+            success: true, 
+            columns, 
+            rows: [mockRow], 
+            error: null 
+          };
+        } else {
+          // DML Mock (INSERT/UPDATE/DELETE)
+          return {
+            success: true,
+            columns: ['affectedRows', 'info', 'Simulated_Table'],
+            rows: [{ affectedRows: 1, info: `Simulated execution on virtual table ${tableName}`, Simulated_Table: tableName }],
+            error: null
+          };
+        }
+      }
+    }
+
+    // ── STANDARD ERROR HANDLING ─────────────────────────────────────────────
     try { await logSqlExecutionAction(ticketId, trimmed, "error"); } catch { }
     return { success: false, columns: [], rows: [], error: err.message || "SQL execution failed." };
+  }
+}
+
+// ── SIMILAR ASSIGNEES ────────────────────────────────────────────────────────
+export async function getSimilarAssigneesAction(ticketId: string) {
+  // 1. Fetch current ticket context
+  const [currentTicket] = await query<any>(`
+    SELECT t.short_description, t.assignment_group, a.root_cause
+    FROM tickets t
+    LEFT JOIN ai_analysis a ON t.number = a.incident_number
+    WHERE t.number = ? LIMIT 1
+  `, [ticketId]);
+
+  if (!currentTicket) return { assignees: [] };
+
+  // 2. Extract keywords from current ticket
+  const desc = (currentTicket.short_description || "") + " " + (currentTicket.root_cause || "");
+  const words = desc.split(/\s+/).filter(w => w.length > 4);
+  
+  if (words.length === 0) return { assignees: [] };
+
+  // 3. Find similar tickets with assignees
+  // We match assignment_group first, then check if description or root_cause has keyword overlaps
+  const conditions = words.map(() => `(t.short_description LIKE ? OR t.description LIKE ? OR a.root_cause LIKE ?)`).join(" OR ");
+  const params = words.flatMap(w => [`%${w}%`, `%${w}%`, `%${w}%`]);
+
+  // We only want tickets that actually HAVE an assignee
+  // We group by matricule to only get their most relevant ticket
+  const q = `
+    SELECT 
+      t.assigned_to as name, 
+      t.assigned_support_matricule as matricule, 
+      MAX(t.number) as similar_ticket_number
+    FROM tickets t
+    LEFT JOIN ai_analysis a ON t.number = a.incident_number
+    WHERE t.number != ?
+      AND t.assignment_group = ?
+      AND t.assigned_to IS NOT NULL 
+      AND t.assigned_support_matricule IS NOT NULL
+      AND (${conditions})
+    GROUP BY t.assigned_support_matricule, t.assigned_to
+    LIMIT 3
+  `;
+
+  try {
+    const rows = await query<any>(q, [ticketId, currentTicket.assignment_group, ...params]);
+    return { assignees: JSON.parse(JSON.stringify(rows)) };
+  } catch (err) {
+    console.error("Error fetching similar assignees:", err);
+    return { assignees: [] };
   }
 }

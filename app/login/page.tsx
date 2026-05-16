@@ -45,16 +45,18 @@ export default function LoginPage() {
         // Block admin/superadmin from using this login page
         if (!ALLOWED_ROLES.includes(userRole)) {
           setError("Access denied. Administrative accounts must use the secure admin portal.");
-          await fetch("/fors/auth/logout", { method: "POST" });
+          await fetch(`/fors/auth/logout?role=${userRole}`, { method: "POST" });
           return;
         }
 
         if (userRole !== selectedRole) {
           setError("Invalid role selection.");
-          await fetch("/fors/auth/logout", { method: "POST" });
+          await fetch(`/fors/auth/logout?role=${userRole}`, { method: "POST" });
           return;
         }
-        router.push(ROLE_REDIRECT[userRole] ?? "/tickets");
+        
+        const homePath = ROLE_REDIRECT[userRole] ?? "/tickets";
+        router.push(`/s/${data.user.matricule}${homePath}`);
       }
     } catch {
       setError("Network error. Please try again.");

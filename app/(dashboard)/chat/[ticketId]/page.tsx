@@ -1,6 +1,6 @@
-import { notFound } from "next/navigation";
-import { getTicketById, getChatMessages } from "@/app/actions";
+import { getTicketById, getChatMessages, getSession } from "@/app/actions";
 import { ChatWindow } from "@/components/chat/ChatWindow";
+import { TicketNotFoundModal } from "@/components/chat/TicketNotFoundModal";
 import Link from "next/link";
 import { ArrowLeft, MessageSquare, Clock, Users, Hash } from "lucide-react";
 import { STATUS_LABELS } from "@/lib/constants";
@@ -21,12 +21,18 @@ const STATUS_PASTEL: Record<string, { bg: string; text: string; ring: string }> 
 
 export default async function ChatDetailPage({ params }: Props) {
   const { ticketId } = await params;
-  const ticket = await getTicketById(ticketId);
-  const allMessages = await getChatMessages();
+  const [ticket, allMessages, session] = await Promise.all([
+    getTicketById(ticketId),
+    getChatMessages(),
+    getSession()
+  ]);
   const messages = allMessages.filter((m) => m.ticketId === ticketId);
 
-  if (!ticket) return notFound();
+  if (!ticket) {
+    return <TicketNotFoundModal ticketId={ticketId} userMatricule={session.user?.matricule} />;
+  }
 
+  const sidPrefix = session.user?.matricule ? `/s/${session.user.matricule}` : "";
   const statusStyle = STATUS_PASTEL[ticket.status] ?? { bg: "bg-slate-100", text: "text-slate-500", ring: "ring-slate-200" };
 
   return (
@@ -38,7 +44,7 @@ export default async function ChatDetailPage({ params }: Props) {
           {/* Back + Identity */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <Link
-              href="/chat"
+              href={`${sidPrefix}/chat`}
               className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all shrink-0"
             >
               <ArrowLeft className="w-4 h-4" />

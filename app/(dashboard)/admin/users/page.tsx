@@ -6,7 +6,7 @@ import clsx from "clsx";
 import {
   Users, UserPlus, Shield, Pencil, Trash2, Power, X,
   Search, Check, AlertTriangle, Download, RefreshCcw,
-  ChevronLeft, ChevronRight, Mail, Key, Hash, Activity, ChevronDown, Loader2
+  ChevronLeft, ChevronRight, Mail, Key, Hash, Activity, ChevronDown, Loader2, Lock, Unlock
 } from "lucide-react";
 import {
   getAdminUsersAction,
@@ -125,14 +125,6 @@ export default function AdminUsersPage() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={load}
-            disabled={loading}
-            className="flex items-center gap-2 bg-white/70 backdrop-blur-md text-slate-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest rounded-2xl border border-slate-200 shadow-sm hover:bg-slate-50 transition-all active:scale-95"
-          >
-            <RefreshCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            Sync
-          </button>
-          <button
             onClick={openCreate}
             className="flex items-center gap-2 bg-violet-500 text-white px-4 py-2 text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-lg hover:bg-violet-700 transition-all active:scale-95"
           >
@@ -148,7 +140,7 @@ export default function AdminUsersPage() {
           { label: "Total Accounts", val: users.length, icon: Users, color: "text-blue-600", bg: "bg-blue-100" },
           { label: "Active Now", val: users.filter(u => u.is_active).length, icon: Activity, color: "text-emerald-600", bg: "bg-emerald-100" },
           { label: "Internal Admin", val: users.filter(u => ["admin", "superadmin"].includes(u.role)).length, icon: Shield, color: "text-indigo-600", bg: "bg-indigo-100" },
-          { label: "Suspended", val: users.filter(u => !u.is_active).length, icon: AlertTriangle, color: "text-rose-600", bg: "bg-rose-100" },
+          { label: "Deactivated", val: users.filter(u => !u.is_active).length, icon: AlertTriangle, color: "text-rose-600", bg: "bg-rose-100" },
         ].map((s, i) => (
           <div key={i} className="bg-white/70 backdrop-blur-xl border border-white/60 p-4 rounded-2xl shadow-sm flex flex-col gap-2">
             <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center", s.bg)}>
@@ -210,7 +202,7 @@ export default function AdminUsersPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={6} className="px-8 py-20 text-center text-slate-400 font-black uppercase tracking-[0.2em] text-[9px] animate-pulse">Syncing Network Directory...</td></tr>
+                <tr><td colSpan={6} className="px-8 py-20 text-center text-slate-400 font-black uppercase tracking-[0.2em] text-[9px] animate-pulse">Loading...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} className="px-8 py-20 text-center text-slate-400 font-black uppercase tracking-widest text-[9px]">No matching profiles found</td></tr>
               ) : (
@@ -227,8 +219,10 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-[11px] font-black text-slate-800">{user.name} {user.surname}</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">@{user.username || "unset"}</p>
+                      <div className="max-w-[180px]">
+                        <p className="text-[11px] font-black text-slate-800 whitespace-normal leading-tight group-hover:text-indigo-600 transition-colors">{user.name} {user.surname}</p>
+                        <p className="text-[9px] font-bold text-slate-400 mt-1 lowercase">@{user.username || "unset"}</p>
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-[11px] text-slate-500 font-bold lowercase">{user.email || "—"}</td>
                     <td className="px-6 py-4">
@@ -244,12 +238,43 @@ export default function AdminUsersPage() {
                             ? "bg-emerald-50 text-emerald-600 border-emerald-100"
                             : "bg-rose-50 text-rose-600 border-rose-100"
                         )}>
-                          {user.is_active ? "Active" : "Suspended"}
+                          {user.is_active ? "Active" : "Deactivated"}
                         </span>
 
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); handleToggle(user.matricule); }} className="p-1.5 rounded-lg hover:bg-white text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-slate-200 shadow-sm"><Power className="w-3.5 h-3.5" /></button>
-                          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(user.matricule); }} className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500 transition-all border border-transparent hover:border-rose-100 shadow-sm"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEdit(user); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-slate-200 shadow-sm"
+                            title="Edit Profile"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(user.matricule); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500 transition-all border border-transparent hover:border-rose-100 shadow-sm"
+                            title="Delete Profile"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+
+                          <div className="w-8 h-8 flex items-center justify-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleToggle(user.matricule); }}
+                              className={clsx(
+                                "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out shadow-sm",
+                                user.is_active ? "bg-emerald-500 hover:bg-emerald-600" : "bg-slate-300 hover:bg-slate-400"
+                              )}
+                              title={user.is_active ? "Deactivate User" : "Activate User"}
+                            >
+                              <span
+                                className={clsx(
+                                  "pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                  user.is_active ? "translate-x-3" : "translate-x-0"
+                                )}
+                              />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -260,29 +285,15 @@ export default function AdminUsersPage() {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-            {filtered.length} profile entries loaded
-          </p>
-          <div className="flex items-center gap-2">
-            <button className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-white transition-all"><ChevronLeft className="w-3.5 h-3.5" /></button>
-            <div className="flex items-center gap-1">
-              <button className="w-7 h-7 rounded-lg bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shadow-md shadow-indigo-100">1</button>
-              <button className="w-7 h-7 rounded-lg text-slate-400 hover:bg-white text-[10px] font-black flex items-center justify-center border border-transparent hover:border-slate-200">2</button>
-            </div>
-            <button className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-white transition-all"><ChevronRight className="w-3.5 h-3.5" /></button>
-          </div>
-        </div>
+
       </div>
 
       {/* Create/Edit User Modal */}
       {showModal && mounted && createPortal(
         <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300"
-          style={{ clipPath: 'inset(0 0 0 16rem)' }}
+          className="fixed inset-0 left-64 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300"
         >
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
 
           <div className="relative w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden border border-white/40 animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white/50">
@@ -292,9 +303,8 @@ export default function AdminUsersPage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight leading-none">
-                    {editUser ? "Update Profile" : "Onboard Account"}
+                    {editUser ? "Update Profile" : "Create Account"}
                   </h3>
-                  <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest leading-none">Manage Account</p>
                 </div>
               </div>
               <button onClick={() => setShowModal(false)} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center transition-all active:scale-90 group">
@@ -312,7 +322,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
-                    <Shield className="w-2.5 h-2.5 text-indigo-500" /> Designation
+                    <Shield className="w-2.5 h-2.5 text-indigo-500" /> Role
                   </label>
                   <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all outline-none appearance-none cursor-pointer">
                     {["it_support", "it_report", "it_manager", "admin", "superadmin"].map(r => <option key={r} value={r}>{r}</option>)}
@@ -340,7 +350,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
-                    <Mail className="w-2.5 h-2.5 text-indigo-500" /> Corporate Email
+                    <Mail className="w-2.5 h-2.5 text-indigo-500" /> Email
                   </label>
                   <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} type="email" className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all outline-none" />
                 </div>
@@ -348,7 +358,7 @@ export default function AdminUsersPage() {
 
               <div className="space-y-1.5">
                 <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
-                  <Key className="w-2.5 h-2.5 text-indigo-500" /> Security Access Key
+                  <Key className="w-2.5 h-2.5 text-indigo-500" /> Password
                 </label>
                 <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} type="password" placeholder="••••••••" className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all outline-none" />
                 {editUser && <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 ml-1">Leave blank to retain current key</p>}
@@ -358,7 +368,7 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="p-5 flex items-center justify-end gap-4 bg-slate-50/50 border-t border-slate-100">
-              <button onClick={() => setShowModal(false)} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Abort</button>
+              <button onClick={() => setShowModal(false)} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
               <button
                 onClick={handleSave}
                 disabled={saving}
@@ -376,10 +386,9 @@ export default function AdminUsersPage() {
       {/* Delete Alert (Full Page Blur) */}
       {deleteTarget && mounted && createPortal(
         <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300"
-          style={{ clipPath: 'inset(0 0 0 16rem)' }}
+          className="fixed inset-0 left-64 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300"
         >
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setDeleteTarget(null)} />
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
           <div className="relative w-full max-w-sm bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl p-8 overflow-hidden border border-white/60 animate-in zoom-in-95 duration-200 text-center">
             <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-sm">
               <Trash2 className="w-8 h-8 text-rose-500" />
@@ -392,7 +401,7 @@ export default function AdminUsersPage() {
               <button onClick={handleDelete} disabled={deleting} className="w-full py-4 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-rose-100">
                 {deleting ? "Purging Records..." : "Confirm Removal"}
               </button>
-              <button onClick={() => setDeleteTarget(null)} className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all">Abort Action</button>
+              <button onClick={() => setDeleteTarget(null)} className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all">Cancel</button>
             </div>
           </div>
         </div>,

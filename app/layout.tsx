@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "FORS Incident Module",
   description: "IT Support Incident Management Dashboard",
+  icons: {
+    icon: "/purpleFors.png",
+  },
 };
 
 export default function RootLayout({

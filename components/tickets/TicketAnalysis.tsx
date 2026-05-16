@@ -15,7 +15,7 @@ export function TicketAnalysis({ analysis }: TicketAnalysisProps) {
       <div className="flex items-center justify-between px-1 mb-1">
         <div className="flex items-center gap-1.5">
           <Bot className="w-3.5 h-3.5 text-indigo-600" />
-          <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">FORS Agent Intelligence</h3>
+          <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">FORS Assistant Intelligence</h3>
         </div>
         <div className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 rounded-lg border border-indigo-100">
           <Sparkles className="w-2.5 h-2.5 text-indigo-500" />
@@ -50,7 +50,7 @@ export function TicketAnalysis({ analysis }: TicketAnalysisProps) {
             <div className="w-7 h-7 bg-gradient-to-br from-violet-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md">
               <Database className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.15em]">Impacted Entities</span>
+            <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.15em]">Impacted Tables</span>
           </div>
         </div>
         <div className="p-3 space-y-1.5">
@@ -83,14 +83,14 @@ export function TicketAnalysis({ analysis }: TicketAnalysisProps) {
             <div className="w-7 h-7 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-lg flex items-center justify-center shadow-md">
               <CheckCircle className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.15em]">Remediation</span>
+            <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.15em]">Resolution Steps</span>
           </div>
         </div>
         <div className="p-3">
           <div className="p-4 bg-emerald-50/40 border border-emerald-100 rounded-xl shadow-inner border-dashed relative group-hover:bg-emerald-50/80 transition-colors">
-             <div className="absolute top-2 right-3">
-               <Zap className="w-3 h-3 text-emerald-500" />
-             </div>
+            <div className="absolute top-2 right-3">
+              <Zap className="w-3 h-3 text-emerald-500" />
+            </div>
             <p className="text-[11px] font-bold text-emerald-800 leading-relaxed whitespace-pre-wrap">
               {analysis.recommendation?.replace(/\\n/g, '\n')}
             </p>

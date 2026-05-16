@@ -23,6 +23,8 @@ export interface Ticket {
   category: string;
   team: string;
   assignedTo: string;
+  /** FORS matricule of the IT support user assigned to this ticket (mapped from ServiceNow). */
+  assignedSupportMatricule?: string | null;
   createdAt: string;
   updatedAt: string;
   confidence: number;
@@ -35,6 +37,14 @@ export interface Ticket {
   closeNotes?: string;
   comments?: string;
   sysClassName?: string;
+  agentSummary?: string;
+  sapModule?: string;
+}
+
+export interface TicketEventLog {
+  message: string;
+  timestamp: string;
+  attribution: string;
 }
 
 export interface TicketAnalysis {
@@ -66,9 +76,11 @@ export interface Conversation {
 export interface ChatMessage {
   id: string;
   conversationId: string;
+  ticketId?: string;
   role: "AI" | "User";
   content: string;
   createdAt: string;
+  senderName?: string;
 }
 
 export interface KPI {

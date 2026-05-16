@@ -14,7 +14,7 @@ export const VIEW_COMPONENTS = [
     label: "Chat History",
     icon: "MessageSquare",
     componentId: "chat_bubble",
-    description: "FORS Agent chat sessions",
+    description: "FORS Assistant chat sessions",
     category: "Header",
   },
   {
@@ -26,7 +26,7 @@ export const VIEW_COMPONENTS = [
   {
     id: "tickets_list",
     label: "Tickets List",
-    description: "Incident ticket queue — list, filter, and status tracking.",
+    description: "Incident ticket queue : list, filter, and status tracking.",
     category: "Dashboard",
   },
   {

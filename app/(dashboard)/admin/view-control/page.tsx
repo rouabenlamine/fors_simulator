@@ -266,7 +266,7 @@ export default function ViewControlPage() {
             <h1 className="text-sm font-black text-slate-800 tracking-tight leading-none">
               View <span className="text-indigo-500">Permissions</span>
             </h1>
-            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">RBAC UI Control & View Permissions</p>
+            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">UI Control & View Permissions</p>
           </div>
         </div>
       </div>
@@ -359,7 +359,7 @@ export default function ViewControlPage() {
               )}
             >
               {saving === activeRole ? <Loader2 className="w-3 h-3 animate-spin" /> : saved === activeRole ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
-              {saving === activeRole ? "Syncing..." : saved === activeRole ? "Deployed!" : "Apply Changes"}
+              {saving === activeRole ? "Syncing..." : saved === activeRole ? "Saved" : "Apply Changes"}
             </button>
           </div>
 
@@ -376,12 +376,6 @@ export default function ViewControlPage() {
                   role={activeRole}
                   accentColor={meta.accent}
                 />
-              </div>
-              <div className="mt-4 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
-                <p className="text-[9px] font-bold text-indigo-600 leading-relaxed flex items-start gap-2">
-                  <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  Locked modules are automatically purged from the user&apos;s navigation and routing protocols.
-                </p>
               </div>
             </div>
 
@@ -410,7 +404,7 @@ export default function ViewControlPage() {
                         const enabled = permissions[activeRole]?.[comp.id as keyof RolePermissions] !== false;
                         const isInNav = roleNavIds.includes(comp.id);
 
-                        let displayLabel = comp.label;
+                        let displayLabel: string = comp.label;
                         if (comp.id === "user_management" && activeRole === "it_manager") {
                           displayLabel = "Team Management";
                         }
@@ -418,13 +412,9 @@ export default function ViewControlPage() {
                           <button
                             key={comp.id}
                             onClick={() => toggle(activeRole, comp.id)}
-                            className={clsx(
-                              "group flex items-center gap-3 px-4 py-3 rounded-[1.2rem] border text-left transition-all duration-300",
-                              enabled
-                                ? "bg-white border-slate-200 hover:border-indigo-400 hover:shadow-md hover:shadow-indigo-50"
-                                : "bg-slate-50 border-slate-100 opacity-60 hover:opacity-100"
-                            )}
+                            className="group flex items-center gap-3 px-4 py-3 rounded-[1.2rem] border text-left transition-all duration-300 bg-white border-slate-200 hover:border-indigo-400 hover:shadow-md hover:shadow-indigo-50"
                           >
+                            {/* Toggle — only element that changes color */}
                             <div className={clsx(
                               "w-8 h-5 rounded-full flex items-center p-0.5 transition-all duration-500 shrink-0",
                               enabled ? "bg-emerald-500" : "bg-slate-200"
@@ -437,17 +427,14 @@ export default function ViewControlPage() {
 
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className={clsx("text-[10px] font-black uppercase tracking-tight truncate", enabled ? "text-slate-800" : "text-slate-400")}>
+                                <p className="text-[10px] font-black uppercase tracking-tight truncate text-slate-800">
                                   {displayLabel}
                                 </p>
-                                {!isInNav && (
-                                  <span className="text-[8px] font-black uppercase tracking-widest text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 shrink-0">global</span>
-                                )}
                               </div>
                               <p className="text-[8px] font-bold text-slate-400 truncate mt-0.5">{comp.description}</p>
                             </div>
 
-                            <div className={clsx("shrink-0 transition-all", enabled ? "text-indigo-500" : "text-slate-300")}>
+                            <div className="shrink-0 text-indigo-500">
                               {enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                             </div>
                           </button>

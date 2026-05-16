@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import clsx from "clsx";
 import {
   FlaskConical, Send, CheckCircle, XCircle, Bot, RefreshCw, Sparkles,
   ChevronDown, ChevronUp, Copy, Check, Hash, FileText, AlertCircle,
@@ -8,7 +9,7 @@ import {
   Zap, MessageSquare, Tag
 } from "lucide-react";
 import {
-  analyzeTicketAction, chatWithAgentAction, createTicket,
+  analyzeTicketAction, chatWithAssistantAction, createTicket,
   createTicketFromXmlAction, getChatMessagesForTicketAction,
   validateAnalysisAction, rejectAnalysisAction
 } from "@/app/actions";
@@ -18,8 +19,8 @@ import type { TicketPriority } from "@/lib/types";
 
 // ─── Reusable Components ───────────────────────────────────────────────────
 
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="mb-1.5 text-[10px] font-black tracking-[0.08em] text-slate-800 uppercase">
+const SectionLabel = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <p className={clsx("mb-1.5 text-[10px] font-black tracking-[0.08em] text-slate-800 uppercase", className)}>
     {children}
   </p>
 );
@@ -419,7 +420,7 @@ export default function LabPage() {
     setChatTyping(true);
     try {
       const history = chatMessages.map(m => ({ role: m.role === 'AI' ? 'assistant' : 'user', content: m.content }));
-      const reply = await chatWithAgentAction(ticketId, chatInput, history);
+      const reply = await chatWithAssistantAction(ticketId, chatInput, history);
       setChatTyping(false);
       setChatMessages((p) => [...p, { role: "AI", content: reply, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
     } catch (err) {
@@ -444,10 +445,10 @@ export default function LabPage() {
           <FlaskConical className="w-6 h-6 text-white" />
         </div>
         <div className="flex flex-col justify-center">
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none flex items-center gap-2">
+          <h1 className="text-xl font-black text-slate-800 tracking-tight leading-none flex items-center gap-2">
             Analysis <span className="text-indigo-500 ">Lab</span>
           </h1>
-          <p className="text-[11px] font-bold text-slate-400 mt-1.5 uppercase tracking-[0.2em]">Diagnostic Ingestion Workspace</p>
+          <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-[0.2em]">Ticket Ingestion Workspace</p>
         </div>
       </div>
 
@@ -877,7 +878,7 @@ export default function LabPage() {
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
               </div>
               <div>
-                <h3 className="text-[14px] font-black text-slate-900 uppercase tracking-wider">FORS Agent</h3>
+                <h3 className="text-[14px] font-black text-slate-900 uppercase tracking-wider">FORS Assistant</h3>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">FORS Core Intelligence</p>
               </div>
             </div>

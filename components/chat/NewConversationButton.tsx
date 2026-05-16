@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { MessageSquarePlus, X, Ticket as TicketIcon, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-export function NewConversationButton() {
+export function NewConversationButton({ userMatricule }: { userMatricule?: string }) {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [ticketId, setTicketId] = useState("INC");
@@ -25,7 +25,8 @@ export function NewConversationButton() {
     }
     setShowModal(false);
     setError("");
-    router.push(`/chat/${trimmed}`);
+    const sidPrefix = userMatricule ? `/s/${userMatricule}` : "";
+    router.push(`${sidPrefix}/chat/${trimmed}`);
   }
 
   function handleClose() {
@@ -62,7 +63,7 @@ export function NewConversationButton() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-800">New Conversation</h3>
-                  <p className="text-xs text-slate-400">Start a conversation with FORS AGENT</p>
+                  <p className="text-xs text-slate-400">Start a conversation with FORS ASSISTANT</p>
                 </div>
               </div>
               <button

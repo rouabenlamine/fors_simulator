@@ -80,6 +80,12 @@ export function translateJsonToNarratives(details: string | undefined, context?:
       if (k === "target" || k === "resource" || k === "object" || k === "entity") return;
       if (k.endsWith("_id") || k === "id" || k === "uuid" || k === "guid") return;
 
+      // Specifically handle overly verbose report config
+      if (k === "reportconfig") {
+        narratives.push({ title: "Report Configuration", description: "Applied custom evaluation metrics and targeted analytical scope." });
+        return;
+      }
+
       const readableKey = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
       const readableValue = formatZeroJson(value);
       

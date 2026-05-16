@@ -48,16 +48,19 @@ function toHumanSentence(log: ActivityLog): string {
   const a = log.action.toLowerCase();
   const ticket = log.ticketId ? `ticket #${log.ticketId}` : "";
 
+  if (a === "xml_ticket_imported")
+    return `Incoming ticket was received and ingested from n8n${ticket ? ` (${ticket})` : ""}`;
+  if (a === "ai_analysis_generated")
+    return `AI analysis is complete and the ticket is ready for review${ticket ? ` (${ticket})` : ""}`;
+
   if (a.includes("approved sql") || a.includes("validated sql"))
     return `${user} approved the proposed SQL fix${ticket ? ` for ${ticket}` : ""}`;
   if (a.includes("rejected sql") || a.includes("rejected"))
     return `${user} rejected the proposed resolution${ticket ? ` for ${ticket}` : ""}`;
   if (a.includes("sql") && a.includes("proposed"))
     return `An AI-generated SQL fix was proposed${ticket ? ` for ${ticket}` : ""}`;
-  if (a.includes("ai") && a.includes("analysis"))
-    return `${user} triggered an AI analysis${ticket ? ` on ${ticket}` : ""}`;
   if (a.includes("gost") || (a.includes("ai") && a.includes("chat")))
-    return `${user} started a FORS Agent chat session${ticket ? ` regarding ${ticket}` : ""}`;
+    return `${user} started a FORS Assistant chat session${ticket ? ` regarding ${ticket}` : ""}`;
   if (a.includes("chat") || a.includes("message"))
     return `${user} sent a team message${ticket ? ` on ${ticket}` : ""}`;
   if (a.includes("login"))
@@ -157,7 +160,7 @@ export default function ActivityPage() {
 
   return (
     <div className="min-h-screen bg-transparent">
-      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
+      <div className="p-4 sm:p-6 max-w-[1400px] mx-auto space-y-5">
 
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -169,15 +172,8 @@ export default function ActivityPage() {
               <h1 className="text-xl font-black text-slate-800 tracking-tight">
                 Team <span className="text-indigo-500">Activity</span>
               </h1>
-              <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                Real-time system interactions, AI diagnostics &amp; resolutions
-              </p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 whitespace-nowrap">Track recent actions and system events.</p>
             </div>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl shrink-0">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">Live</span>
-            <span className="text-[10px] font-bold text-emerald-600 ml-1">{logs.length} entries</span>
           </div>
         </div>
 
@@ -312,7 +308,7 @@ export default function ActivityPage() {
       {/* Log Detail Modal — Zero JSON, human-readable */}
       {selectedLog && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 left-64 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200"
           onClick={() => setSelectedLog(null)}
         >
           <div
@@ -346,13 +342,15 @@ export default function ActivityPage() {
             {/* Modal Content — Human readable, zero JSON */}
             <div className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Incident Number</p>
-                  <p className="text-sm font-black text-indigo-600 flex items-center gap-1.5">
-                    <Ticket className="w-3.5 h-3.5" />
-                    #{selectedLog.ticketId || "System Global"}
-                  </p>
-                </div>
+                {selectedLog.ticketId && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Incident Number</p>
+                    <p className="text-sm font-black text-indigo-600 flex items-center gap-1.5">
+                      <Ticket className="w-3.5 h-3.5" />
+                      #{selectedLog.ticketId}
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Performed By</p>
                   <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">

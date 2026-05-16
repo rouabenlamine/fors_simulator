@@ -206,9 +206,6 @@ export default function SuperadminDatabaseExplorer() {
                 />
 
                 <div className="flex justify-between items-center px-1">
-                  <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                    Direct manipulation bypasses relational integrity checks.
-                  </p>
                   <button
                     onClick={handleRunSql}
                     disabled={sqlLoading || !sqlQuery.trim()}
@@ -311,7 +308,7 @@ export default function SuperadminDatabaseExplorer() {
                 <Database className="w-8 h-8 text-slate-200" />
               </div>
               <div className="space-y-2">
-                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Topology Mapping Required</h3>
+                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Explore Database</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest max-w-[280px] leading-relaxed">
                   Select a registered database node from the structural sidebar to initiate inspection.
                 </p>

@@ -110,13 +110,17 @@ export async function POST(request: Request) {
 
         // ── Other fields ──────────────────────────────────────────────────────
         const state            = pick(body.state, body.status, body.incident_state);
-        const priority         = pick(body.priority, body.urgency, body.impact);
+        const priority         = pick(body.analysis_priority, body.priority, body.impact);
         const assignment_group = pick(body.assignment_group, body.group, body.team);
         const assigned_to      = pick(body.assigned_to, body.assignee, body.agent);
+        const assigned_to_user_id = pick(body.assigned_to_user_id); // Direct matricule
         const caller           = pick(body.caller, body.caller_id, body.opened_by, body.reporter, body.user, body.requester);
         const sys_class_name   = pick(body.sys_class_name, body.type, body.category) || 'incident';
         const opened_at        = body.opened_at || body.created_at || body.sys_created_on || null;
         const closed_at        = body.closed_at || body.resolved_at || null;
+        const urgency          = pick(body.urgency);
+        const watch_list       = pick(body.watch_list);
+        const comments         = pick(body.comments);
 
         // ── Resolve numeric codes → human-readable labels ─────────────────────
         const finalState    = resolve(state, STATE_MAP, 'New');
@@ -125,6 +129,21 @@ export async function POST(request: Request) {
         const finalLongDesc  = longDesc  || '';
 
         console.log(`[/api/tickets] Resolved → number="${incident_number}" | title="${finalShortDesc}" | state="${finalState}" | priority="${finalPriority}"`);
+
+        // ── Verify matricule exists to prevent Foreign Key crashes ────────────
+        let validated_matricule = null;
+        if (assigned_to_user_id) {
+            try {
+                const userCheck = await query<any>("SELECT matricule FROM users WHERE matricule = ?", [assigned_to_user_id.trim()]);
+                if (userCheck.length > 0) {
+                    validated_matricule = userCheck[0].matricule;
+                } else {
+                    console.log(`[/api/tickets] WARNING: assigned_to_user_id "${assigned_to_user_id}" does NOT exist in the users table. Ignoring to prevent FK constraint failure.`);
+                }
+            } catch (err) {
+                console.error("[/api/tickets] Error verifying matricule:", err);
+            }
+        }
 
         const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
@@ -137,13 +156,17 @@ export async function POST(request: Request) {
                 priority,
                 assignment_group,
                 assigned_to,
+                assigned_support_matricule,
                 sys_created_on,
                 sys_updated_on,
                 opened_by,
                 opened_at,
                 closed_at,
-                sys_class_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                sys_class_name,
+                urgency,
+                watch_list,
+                comments
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 short_description = CASE
                     WHEN VALUES(short_description) != '' AND VALUES(short_description) != 'No Title'
@@ -158,7 +181,22 @@ export async function POST(request: Request) {
                 state          = VALUES(state),
                 priority       = VALUES(priority),
                 sys_updated_on = VALUES(sys_updated_on),
-                closed_at      = VALUES(closed_at)
+                closed_at      = VALUES(closed_at),
+                urgency        = VALUES(urgency),
+                watch_list     = VALUES(watch_list),
+                assigned_to    = CASE
+                    WHEN VALUES(assigned_to) IS NOT NULL AND VALUES(assigned_to) != ''
+                    THEN VALUES(assigned_to)
+                    ELSE assigned_to
+                END,
+                comments       = CASE
+                    WHEN VALUES(comments) != '' THEN VALUES(comments)
+                    ELSE comments
+                END,
+                assigned_support_matricule = CASE 
+                    WHEN VALUES(assigned_support_matricule) IS NOT NULL THEN VALUES(assigned_support_matricule)
+                    ELSE assigned_support_matricule
+                END
         `;
 
         const values = [
@@ -169,20 +207,47 @@ export async function POST(request: Request) {
             finalPriority,
             assignment_group || 'IT Support',
             assigned_to      || null,
+            validated_matricule, // Use the DB-validated matricule!
             now,
             now,
             caller           || 'System',
             opened_at        || now,
             closed_at        || null,
             sys_class_name,
+            urgency          || null,
+            watch_list       || null,
+            comments         || null,
         ];
 
         await query(q, values);
-        
+
+        // ── Resolve assigned_to → FORS support user matricule ─────────────────
+        // Fallback: If we didn't get assigned_to_user_id from n8n directly, try to
+        // find a matching it_support user using assigned_to (in case old payload is sent).
+        if (!assigned_to_user_id && assigned_to) {
+            try {
+                const supportUsers = await query<any>(
+                    "SELECT matricule FROM users WHERE matricule = ? AND role = 'it_support' LIMIT 1",
+                    [assigned_to.trim()]
+                );
+                if (supportUsers.length > 0) {
+                    await query(
+                        "UPDATE tickets SET assigned_support_matricule = ? WHERE number = ?",
+                        [supportUsers[0].matricule, incident_number]
+                    );
+                    console.log(`[/api/tickets] Mapped assigned_to="${assigned_to}" → FORS matricule="${supportUsers[0].matricule}"`);
+                } else {
+                    console.log(`[/api/tickets] No FORS it_support user found for assigned_to="${assigned_to}"`);
+                }
+            } catch (mapErr: any) {
+                console.error("[/api/tickets] Failed to map assigned_support_matricule:", mapErr.message);
+            }
+        }
+
         // Log n8n insertion for notification center
-        await logActivity("XML_TICKET_IMPORTED", {
+        await logActivity("INCOMING_N8N_TICKET", {
             ticketId: incident_number,
-            details: { message: `n8n automated insertion of ticket ${incident_number}`, source: "n8n" }
+            details: { message: `Incoming ticket imported and queued for analysis from n8n`, source: "n8n" }
         });
 
         return NextResponse.json({

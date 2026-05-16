@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import clsx from "clsx";
-import { Database, Play, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Database, Play, AlertTriangle, ShieldCheck, Loader2 } from "lucide-react";
 import { executeRawSqlAction } from "@/app/actions/admin-actions";
 
 export default function SqlConsolePage() {
@@ -31,7 +31,7 @@ export default function SqlConsolePage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 py-6 px-4 animate-in fade-in duration-500">
-      
+
       {/* Header Area */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-1">
         <div className="flex items-center gap-4">
@@ -45,7 +45,7 @@ export default function SqlConsolePage() {
             <p className="text-[11px] font-bold text-slate-400 mt-1.5 uppercase tracking-[0.2em]">Raw Database Access & Query Protocol</p>
           </div>
         </div>
-        
+
         {isDestructive && (
           <div className="flex items-center gap-2.5 text-[10px] font-black text-rose-500 bg-rose-50 px-4 py-2 rounded-2xl border border-rose-100 uppercase tracking-widest animate-pulse">
             <AlertTriangle className="w-4 h-4" />
@@ -77,9 +77,7 @@ export default function SqlConsolePage() {
         />
 
         <div className="px-8 py-5 border-t border-white/5 bg-slate-950/50 flex items-center justify-between">
-          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-            Warning: Direct database manipulation bypasses application-level validation.
-          </p>
+
           <button
             onClick={handleRun}
             disabled={loading || !query.trim()}
@@ -127,7 +125,7 @@ export default function SqlConsolePage() {
               </div>
             </div>
           </div>
-          
+
           <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
             <table className="w-full text-left text-[11px] whitespace-nowrap font-mono">
               <thead className="bg-slate-50 text-slate-400 border-b border-slate-100 sticky top-0 z-10">
@@ -163,7 +161,6 @@ export default function SqlConsolePage() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       `}</style>
-    </div>
     </div>
   );
 }

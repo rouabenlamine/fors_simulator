@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { Settings, Save, Plus, Check, X, ToggleLeft, ToggleRight, Loader2, ChevronDown, Activity, Clock, BarChart3, ShieldCheck, BookOpen, Sparkles, AlertTriangle, Pencil } from "lucide-react";
-import { getKpiConfigs, updateKpiConfigAction, createKpiConfigAction } from "@/app/actions/admin-actions";
+import { Settings, Save, Plus, Check, X, ToggleLeft, ToggleRight, Loader2, ChevronDown, Activity, Clock, BarChart3, ShieldCheck, BookOpen, Sparkles, AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { getKpiConfigs, updateKpiConfigAction, createKpiConfigAction, deleteKpiConfigAction } from "@/app/actions/admin-actions";
 
 export default function KpiConfigPage() {
   const [kpis, setKpis] = useState<any[]>([]);
@@ -15,6 +15,7 @@ export default function KpiConfigPage() {
   const [creating, setCreating] = useState(false);
   const [edits, setEdits] = useState<Record<string, any>>({});
   const [selectedKpi, setSelectedKpi] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -52,6 +53,18 @@ export default function KpiConfigPage() {
     setCreating(false);
   }
 
+  async function handleDelete(id: string) {
+    try {
+      await deleteKpiConfigAction(id);
+      setDeleteTarget(null);
+      setSelectedKpi(null);
+      setEdits({});
+      await load();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  }
+
   const CATEGORY_MAP: Record<string, { icon: any, label: string, color: string }> = {
     sla: { icon: Clock, label: "SLA", color: "text-blue-600 bg-blue-50 border-blue-100" },
     performance: { icon: Activity, label: "Performance", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
@@ -73,17 +86,10 @@ export default function KpiConfigPage() {
             <h1 className="text-sm font-black text-slate-800 tracking-tight">
               KPI <span className="text-indigo-500">Configuration</span>
             </h1>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Platform Governance</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 whitespace-nowrap">Control system KPIs and metrics.</p>
           </div>
         </div>
 
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg hover:bg-slate-800 transition-all active:scale-95 group"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add Metric
-        </button>
       </div>
 
       {loading ? (
@@ -160,7 +166,14 @@ export default function KpiConfigPage() {
                         </div>
                       </td>
                       <td className="px-8 py-5 text-right">
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-end gap-2">
+                          <div
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(kpi); }}
+                            className="w-8 h-8 bg-rose-50 text-rose-400 hover:bg-rose-600 hover:text-white rounded-xl flex items-center justify-center transition-all duration-300"
+                            title="Delete KPI"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </div>
                           <div className="w-8 h-8 bg-indigo-50 text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white rounded-xl flex items-center justify-center transition-all duration-300">
                             <Pencil className="w-3.5 h-3.5" />
                           </div>
@@ -177,8 +190,8 @@ export default function KpiConfigPage() {
 
       {/* Edit Metric Drawer/Modal */}
       {selectedKpi && mounted && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300" style={{ clipPath: 'inset(0 0 0 16rem)' }}>
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => { setSelectedKpi(null); setEdits({}); }} />
+        <div className="fixed inset-0 left-64 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { setSelectedKpi(null); setEdits({}); }} />
           <div className="relative w-full max-w-lg bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/60 animate-in zoom-in-95 duration-200">
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/50">
               <div className="flex items-center gap-4">
@@ -198,7 +211,7 @@ export default function KpiConfigPage() {
             <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Metric Name</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">KPI Title</label>
                   <input
                     value={edits[selectedKpi.id]?.name ?? selectedKpi.name}
                     onChange={(e) => setEdit(selectedKpi.id, "name", e.target.value)}
@@ -218,7 +231,7 @@ export default function KpiConfigPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Governance Meta</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Description</label>
                 <textarea
                   value={edits[selectedKpi.id]?.description ?? selectedKpi.description ?? ""}
                   onChange={(e) => setEdit(selectedKpi.id, "description", e.target.value)}
@@ -229,7 +242,6 @@ export default function KpiConfigPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">SQL</label>
-                  <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Active Connection</span>
                 </div>
                 <textarea
                   value={edits[selectedKpi.id]?.sql_query ?? selectedKpi.sql_query ?? ""}
@@ -244,15 +256,15 @@ export default function KpiConfigPage() {
                 onClick={() => { setSelectedKpi(null); setEdits({}); }}
                 className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
               >
-                Discard
+                Cancel
               </button>
               <button
                 onClick={() => { saveKpi(selectedKpi); setSelectedKpi(null); }}
                 disabled={savingId === selectedKpi.id || !edits[selectedKpi.id]}
-                className="bg-indigo-600 text-white px-8 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                className="bg-blue-600 text-white px-8 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-blue-800 transition-all active:scale-95 flex items-center gap-2"
               >
                 {savingId === selectedKpi.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                Commit KPI
+                Save
               </button>
             </div>
           </div>
@@ -260,102 +272,39 @@ export default function KpiConfigPage() {
         document.getElementById("modal-portal")!
       )}
 
-      {/* Create Metric Modal */}
-      {showCreate && mounted && createPortal(
-        <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300"
-          style={{ clipPath: 'inset(0 0 0 16rem)' }}
-        >
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowCreate(false)} />
-
-          <div className="relative w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden border border-white/40 animate-in zoom-in-95 duration-200">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white/50">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 text-white">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight leading-none">New Metric</h3>
-                  <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Platform Engineering</p>
-                </div>
-              </div>
-              <button onClick={() => setShowCreate(false)} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center transition-all active:scale-90 group">
-                <X className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Metric Name *</label>
-                  <input
-                    value={createForm.name}
-                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                    placeholder="e.g., Response SLA Breach"
-                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all outline-none"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Classification</label>
-                  <div className="relative">
-                    <select
-                      value={createForm.category}
-                      onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
-                      className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white cursor-pointer transition-all appearance-none outline-none"
-                    >
-                      {["sla", "performance", "volume", "quality", "knowledge"].map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                  </div>
+      {/* ── Custom Delete Confirmation Modal ───────────────────────── */}
+      {deleteTarget && mounted && createPortal(
+        <div className="fixed inset-0 left-64 z-[100000] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+          <div className="relative w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl border border-white/60 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center space-y-6">
+              <div className="w-20 h-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto shadow-inner">
+                <div className="w-12 h-12 bg-rose-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-rose-200 animate-pulse">
+                  <AlertTriangle className="w-6 h-6" />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Brief Description</label>
-                <textarea
-                  value={createForm.description}
-                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  placeholder="Describe the metric purpose and scope..."
-                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all outline-none h-20 resize-none"
-                />
+              <div className="space-y-2">
+                <h3 className="text-lg font-black text-slate-900 tracking-tight">Permanent Deletion</h3>
+                <p className="text-xs font-bold text-slate-500 leading-relaxed px-4">
+                  Are you sure you want to remove <span className="text-rose-500">{deleteTarget.name}</span>? This action is immediate and cannot be undone.
+                </p>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between ml-1">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Data Ingestion (SQL)</label>
-                  <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Read-only Access</span>
-                </div>
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-slate-900 rounded-xl blur-lg opacity-20 group-hover:opacity-30 transition-opacity" />
-                  <textarea
-                    value={createForm.sql_query}
-                    onChange={(e) => setCreateForm({ ...createForm, sql_query: e.target.value })}
-                    className="relative w-full bg-slate-900 text-slate-300 font-mono text-[10px] p-4 rounded-xl border border-slate-800 focus:border-indigo-500/50 outline-none h-32 resize-none transition-all"
-                    placeholder="SELECT COUNT(*) FROM platform_events WHERE ..."
-                  />
-                </div>
+              <div className="flex flex-col gap-3 pt-2">
+                <button
+                  onClick={() => handleDelete(deleteTarget.id)}
+                  className="w-full bg-rose-500 text-white py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-rose-100 hover:bg-rose-600 transition-all active:scale-[0.98]"
+                >
+                  Confirm Deletion
+                </button>
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="w-full bg-slate-50 text-slate-400 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-slate-100 hover:text-slate-600 transition-all active:scale-[0.98]"
+                >
+                  Cancel
+                </button>
               </div>
-            </div>
-
-            <div className="p-5 pt-3 flex items-center justify-end gap-4 bg-slate-50/50 border-t border-slate-100">
-              <button
-                onClick={() => setShowCreate(false)}
-                className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                Abort
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={creating}
-                className="bg-indigo-600 text-white px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
-              >
-                {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                {creating ? "Processing..." : "Deploy Metric"}
-              </button>
             </div>
           </div>
         </div>,

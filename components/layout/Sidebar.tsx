@@ -31,10 +31,14 @@ const NAV_COMPONENT_MAP: Record<string, ComponentId> = {
   "/admin/dashboard": "admin_control_panel",
   "/superadmin/dashboard": "admin_control_panel",
   "/admin/users": "user_management",
+  "/superadmin/users": "user_management",
   "/admin/audit": "audit_logs",
+  "/superadmin/audit": "audit_logs",
   "/admin/view-control": "view_permissions_management",
+  "/superadmin/view-control": "view_permissions_management",
   "/admin/sql-console": "system_db_explorer",
   "/admin/kpi-config": "kpi_config",
+  "/superadmin/kpi-config": "kpi_config",
   "/superadmin/integrations": "integration_hub",
   "/superadmin/database-explorer": "system_db_explorer",
 };
@@ -56,7 +60,7 @@ const IT_SUPPORT_NAV: NavItem[] = [
   { href: "/chat", label: "Chat History", icon: MessageSquare, componentId: "chat_bubble" },
   {
     href: "/database",
-    label: "Fors Explorer",
+    label: "FORS Explorer",
     icon: Layers,
     componentId: "fors_explorer",
     sub: [
@@ -79,7 +83,7 @@ const IT_REPORT_NAV: NavItem[] = [
 
 const IT_MANAGER_NAV: NavItem[] = [
   { href: "/activity", label: "Team Activity", icon: Activity, componentId: "activity_logs" },
-  { href: "/kpis", label: "Team Performance", icon: BarChart3, componentId: "kpi_widgets" },
+  { href: "/team-performance", label: "Team Performance", icon: BarChart3, componentId: "kpi_widgets" },
   { href: "/users", label: "Team Management", icon: Users, componentId: "user_management" },
 ];
 
@@ -90,7 +94,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin/audit", label: "Audit Logs", icon: Activity, componentId: "audit_logs" },
   {
     href: "/database",
-    label: "Fors Explorer",
+    label: "FORS Explorer",
     icon: Layers,
     componentId: "fors_explorer",
     sub: [
@@ -107,13 +111,13 @@ const ADMIN_NAV: NavItem[] = [
 
 const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/superadmin/dashboard", label: "Control Panel", icon: LayoutDashboard, componentId: "admin_control_panel" },
-  { href: "/admin/users", label: "User Management", icon: Users, componentId: "user_management" },
-  { href: "/superadmin/integrations", label: "Integration Hub", icon: Cpu, componentId: "integration_hub" },
-  { href: "/admin/kpi-config", label: "KPI Configuration", icon: Settings2, componentId: "kpi_config" },
-  { href: "/admin/audit", label: "Audit Logs", icon: Activity, componentId: "audit_logs" },
+  { href: "/superadmin/users", label: "User Management", icon: Users, componentId: "user_management" },
+  { href: "/superadmin/integrations", label: "External Integrations", icon: Cpu, componentId: "integration_hub" },
+  { href: "/superadmin/kpi-config", label: "KPI Configuration", icon: Settings2, componentId: "kpi_config" },
+  { href: "/superadmin/audit", label: "Audit Logs", icon: Activity, componentId: "audit_logs" },
   {
     href: "/database",
-    label: "Fors Explorer",
+    label: "FORS Explorer",
     icon: Database,
     componentId: "fors_explorer",
     sub: [
@@ -124,7 +128,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
       { href: "/database?view=indexes", label: "Indexes" },
     ],
   },
-  { href: "/admin/view-control", label: "View Permissions", icon: ShieldCheck, componentId: "view_permissions_management" },
+  { href: "/superadmin/view-control", label: "View Permissions", icon: ShieldCheck, componentId: "view_permissions_management" },
   { href: "/superadmin/database-explorer", label: "Database Explorer", icon: Database, componentId: "system_db_explorer" },
 ];
 
@@ -175,14 +179,6 @@ export function Sidebar({ user }: { user?: User }) {
       return permissions[item.componentId] !== false;
     });
 
-  // Global search state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
   // Profile dropdown state
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -193,17 +189,9 @@ export function Sidebar({ user }: { user?: User }) {
     setExplorerOpen(pathname?.startsWith("/database") ?? false);
   }, [pathname]);
 
-  // Pre-fetched data for search
-  const [allMenus, setAllMenus] = useState<any[]>([]);
-  const [allTables, setAllTables] = useState<any[]>([]);
-  const [dataLoaded, setDataLoaded] = useState(false);
-
   // Close popups on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setSearchOpen(false);
-      }
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileOpen(false);
       }
@@ -212,81 +200,14 @@ export function Sidebar({ user }: { user?: User }) {
     return () => document.removeEventListener("mousedown", handle);
   }, []);
 
-  // Lazy-load explorer data when search is first opened
-  const ensureData = useCallback(async () => {
-    if (dataLoaded) return;
-    setSearchLoading(true);
-    try {
-      const [menus, tables] = await Promise.all([getExplorerMenus(), getExplorerTables()]);
-      setAllMenus(menus);
-      setAllTables(tables);
-      setDataLoaded(true);
-    } catch (e) {
-      console.error("Search data load failed", e);
-    } finally {
-      setSearchLoading(false);
-    }
-  }, [dataLoaded]);
-
-  // Run live search whenever query changes
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    const q = searchQuery.toLowerCase();
-    const results: SearchResult[] = [];
-
-    allMenus.forEach((m) => {
-      if (m.title?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q)) {
-        results.push({
-          type: "menu",
-          label: m.title,
-          sublabel: m.description || undefined,
-          href: `/database?view=menus&id=${m.id}`,
-        });
-      }
-    });
-
-    allTables.forEach((t) => {
-      if (t.name?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q)) {
-        results.push({
-          type: "table",
-          label: t.name,
-          sublabel: t.description || undefined,
-          href: `/database?view=tables&table=${encodeURIComponent(t.name)}`,
-        });
-      }
-    });
-
-    setSearchResults(results.slice(0, 12));
-  }, [searchQuery, allMenus, allTables]);
-
-  function handleSearchFocus() {
-    setSearchOpen(true);
-    ensureData();
-  }
-
-  function handleResultClick(href: string) {
-    setSearchOpen(false);
-    setSearchQuery("");
-    router.push(href);
-  }
-
   async function handleLogout() {
     const isAdmin = role === "admin" || role === "superadmin";
     try {
-      await fetch("/fors/auth/logout", { method: "POST", redirect: "manual" });
+      // Only clear this role's session — other role sessions remain active
+      await fetch(`/fors/auth/logout?role=${role}`, { method: "POST", redirect: "manual" });
     } catch { /* ignore */ }
     window.location.href = isAdmin ? "/admin/login" : "/login";
   }
-
-  const typeIcon: Record<SearchResult["type"], React.ReactNode> = {
-    menu: <BookOpen className="w-3.5 h-3.5 text-indigo-400" />,
-    table: <Database className="w-3.5 h-3.5 text-emerald-400" />,
-    transaction: <Layers className="w-3.5 h-3.5 text-violet-400" />,
-    field: <Menu className="w-3.5 h-3.5 text-amber-400" />,
-  };
 
   function NavGroup({ section, items }: { section: string; items: NavItem[] }) {
     return (
@@ -294,9 +215,10 @@ export function Sidebar({ user }: { user?: User }) {
         <p className="px-3 mb-1.5 text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">{section}</p>
         <nav className="space-y-0.5">
           {items.map(({ href, label, icon: Icon, sub }) => {
+            const sidPrefix = user?.matricule ? `/s/${user.matricule}` : "";
             const pathBase = href.split("?")[0];
             const isPathActive = pathname
-              ? pathname === pathBase || pathname.startsWith(pathBase + "/")
+              ? pathname === `${sidPrefix}${pathBase}` || pathname.startsWith(`${sidPrefix}${pathBase}/`)
               : false;
             const isOpen = href.includes("database") ? (explorerOpen || isPathActive) : false;
 
@@ -309,11 +231,14 @@ export function Sidebar({ user }: { user?: User }) {
                       ? "bg-white/10 text-white"
                       : "text-white/50 hover:bg-white/5 hover:text-white/80"
                   )}
-                  onClick={() =>
-                    href.includes("database") && sub
-                      ? setExplorerOpen(!explorerOpen)
-                      : router.push(href)
-                  }
+                  onClick={() => {
+                    const sidPrefix = user?.matricule ? `/s/${user.matricule}` : "";
+                    if (href.includes("database") && sub) {
+                      setExplorerOpen(!explorerOpen);
+                    } else {
+                      router.push(`${sidPrefix}${href}`);
+                    }
+                  }}
                 >
                   {isPathActive && (
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full bg-indigo-400" />
@@ -349,7 +274,7 @@ export function Sidebar({ user }: { user?: User }) {
                       return (
                         <Link
                           key={s.href}
-                          href={s.href}
+                          href={`${user?.matricule ? '/s/' + user.matricule : ''}${s.href}`}
                           className={clsx(
                             "block py-1.5 px-2 text-xs font-semibold rounded-lg transition-all",
                             isSubActive
@@ -446,68 +371,6 @@ export function Sidebar({ user }: { user?: User }) {
             Enterprise Solution
           </p>
         </div>
-      </div>
-
-      {/* ── Global Search ────────────────────────────────────────── */}
-      <div className="relative px-4 py-3 border-b border-white/5" ref={searchRef}>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-          <input
-            ref={inputRef}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={handleSearchFocus}
-            placeholder="Search system…"
-            className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-7 py-2 text-xs text-white/80 placeholder:text-white/25 outline-none focus:bg-white/8 focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/30 transition-all"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => { setSearchQuery(""); setSearchResults([]); }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-
-        {/* Search dropdown */}
-        {searchOpen && (searchQuery.trim() || searchLoading) && (
-          <div className="absolute left-4 right-4 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
-            {searchLoading && !dataLoaded ? (
-              <div className="px-4 py-3 text-xs text-slate-400 flex items-center gap-2">
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                Indexing components…
-              </div>
-            ) : searchResults.length === 0 && searchQuery ? (
-              <div className="px-4 py-3 text-xs text-slate-400">
-                No matches for &quot;{searchQuery}&quot;
-              </div>
-            ) : (
-              <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100 custom-scrollbar">
-                {searchResults.map((r, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleResultClick(r.href)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors group"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 group-hover:bg-indigo-50 transition-colors">
-                      {typeIcon[r.type]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-700 truncate group-hover:text-indigo-600 transition-colors">
-                        {r.label}
-                      </p>
-                      {r.sublabel && (
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{r.sublabel}</p>
-                      )}
-                    </div>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-400 -translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* ── Nav Section ──────────────────────────────────────────── */}

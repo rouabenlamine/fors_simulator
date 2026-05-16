@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import clsx from "clsx";
 import Link from "next/link";
 import {
@@ -27,6 +28,7 @@ interface AdminControlPanelProps {
     totalTickets: number;
     pendingTickets: number;
     anomalies: Anomaly[];
+    userMatricule: string;
   };
   role: string;
 }
@@ -64,15 +66,19 @@ export function AdminControlPanel({ stats, role }: AdminControlPanelProps) {
   ];
 
   const adminFunctions = [
-    { label: "User Management", icon: Users, href: "/admin/users", desc: "Manage accounts & roles", color: "text-indigo-600", bg: "bg-indigo-100" },
-    { label: "KPI Configuration", icon: Settings2, href: "/admin/kpi-config", desc: "Custom KPI metrics", color: "text-violet-600", bg: "bg-violet-100" },
-    { label: "Audit Logs", icon: FileText, href: "/admin/audit", desc: "Security activity logs", color: "text-blue-600", bg: "bg-blue-100" },
-    { label: "Fors Explorer", icon: Layers, href: "/database", desc: "Functional data map", color: "text-emerald-600", bg: "bg-emerald-100" },
-    { label: "View Control", icon: Shield, href: "/admin/view-control", desc: "UI RBAC settings", color: "text-amber-600", bg: "bg-amber-100" },
+    { label: "User Management", icon: Users, href: "/admin/users", desc: "Manage accounts", color: "text-indigo-600", bg: "bg-indigo-100" },
+    { label: "KPI Configuration", icon: Settings2, href: "/admin/kpi-config", desc: "Manage KPIs", color: "text-violet-600", bg: "bg-violet-100" },
+    { label: "Audit Logs", icon: FileText, href: "/admin/audit", desc: "Monitor logs", color: "text-blue-600", bg: "bg-blue-100" },
+    { label: "Fors Explorer", icon: Layers, href: "/database", desc: "Manage FORS data", color: "text-emerald-600", bg: "bg-emerald-100" },
+    { label: "View Control", icon: Shield, href: "/admin/view-control", desc: "Manage UI access", color: "text-amber-600", bg: "bg-amber-100" },
   ];
 
   const superAdminFunctions = [
-    ...adminFunctions,
+    { label: "User Management", icon: Users, href: "/superadmin/users", desc: "Manage accounts", color: "text-indigo-600", bg: "bg-indigo-100" },
+    { label: "KPI Configuration", icon: Settings2, href: "/superadmin/kpi-config", desc: "Manage KPIs", color: "text-violet-600", bg: "bg-violet-100" },
+    { label: "Audit Logs", icon: FileText, href: "/superadmin/audit", desc: "Monitor logs", color: "text-blue-600", bg: "bg-blue-100" },
+    { label: "Fors Explorer", icon: Layers, href: "/database", desc: "Manage FORS data", color: "text-emerald-600", bg: "bg-emerald-100" },
+    { label: "View Control", icon: Shield, href: "/superadmin/view-control", desc: "Manage UI access", color: "text-amber-600", bg: "bg-amber-100" },
     { label: "Integration Hub", icon: Cpu, href: "/superadmin/integrations", desc: "n8n & ServiceNow", color: "text-rose-600", bg: "bg-rose-100" },
     { label: "Database Explorer", icon: Database, href: "/superadmin/database-explorer", desc: "Direct DB inspection", color: "text-slate-700", bg: "bg-slate-200" },
   ];
@@ -124,7 +130,7 @@ export function AdminControlPanel({ stats, role }: AdminControlPanelProps) {
           {currentFunctions.map((f, i) => (
             <Link
               key={i}
-              href={f.href}
+              href={`/s/${stats.userMatricule}${f.href}`}
               className="group bg-white/70 backdrop-blur-xl border border-white/60 p-3.5 rounded-xl shadow-sm hover:shadow-md hover:border-indigo-200 transition-all flex items-start gap-3"
             >
               <div className={clsx("w-9 h-9 rounded-lg flex items-center justify-center shrink-0 shadow-sm transition-transform group-hover:scale-110", f.bg)}>
@@ -184,11 +190,11 @@ export function AdminControlPanel({ stats, role }: AdminControlPanelProps) {
         )}
       </div>
 
-      {/* ─── Blur Modal Backdrop (Whole Page) ─── */}
-      {selectedItem && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          {/* THE BLUR COVERING THE WHOLE PAGE */}
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setSelectedItem(null)} />
+      {/* ─── Blur Modal Backdrop — portalled to body to escape overflow ─── */}
+      {selectedItem && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 left-64 z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          {/* THE BLUR COVERING THE CONTENT AREA (not the sidebar) */}
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-md" onClick={() => setSelectedItem(null)} />
 
           <div className="relative w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/60 animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
@@ -250,11 +256,12 @@ export function AdminControlPanel({ stats, role }: AdminControlPanelProps) {
                 onClick={() => setSelectedItem(null)}
                 className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98]"
               >
-                Acknowledge Details
+                Cancel
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

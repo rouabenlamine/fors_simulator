@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getTicketById, getTicketAnalysisAction, updateTicketStatusAction, addTicketCommentAction } from "@/app/actions";
+import { getTicketById, getTicketAnalysisAction, updateTicketStatusAction, addTicketCommentAction, getTicketAuthContextAction } from "@/app/actions";
 import type { Ticket, TicketAnalysis as TAnalysis, TicketEventLog } from "@/lib/types";
 import { TicketAnalysis } from "@/components/tickets/TicketAnalysis";
 import { SQLProposal } from "@/components/tickets/SQLProposal";
 import { ApproveRejectBar } from "@/components/tickets/ApproveRejectBar";
 import { STATUS_LABELS } from "@/lib/constants";
-import { ArrowLeft, Zap, RefreshCw, MessageSquare, CheckCircle, Bot, Database, Activity, Shield, Hash, Layers, User, Clock, Terminal, Send } from "lucide-react";
+import { ArrowLeft, Zap, RefreshCw, MessageSquare, CheckCircle, Bot, Database, Activity, Shield, Hash, Layers, User, Clock, Terminal, Send, Lock } from "lucide-react";
 import Link from "next/link";
-import { executeSqlPreviewAction, getEventLogsForTicketAction, updateTicketSapModuleAction } from "@/app/actions";
+import { executeSqlPreviewAction, getEventLogsForTicketAction, updateTicketSapModuleAction, getSimilarAssigneesAction } from "@/app/actions";
 import { clsx } from "clsx";
 
 const SAP_MODULES = [
@@ -42,19 +42,41 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [eventLogs, setEventLogs] = useState<TicketEventLog[]>([]);
   const [eventLogsLoading, setEventLogsLoading] = useState(false);
-  const [sqlPreview, setSqlPreview] = useState<{ success: boolean; rows: any[]; columns: string[]; error?: string } | null>(null);
+  const [sqlPreview, setSqlPreview] = useState<{ success: boolean; rows: any[]; columns: string[]; error?: string | null } | null>(null);
   const [sqlPreviewLoading, setSqlPreviewLoading] = useState(false);
   const [sapModule, setSapModule] = useState("");
   const [sapModuleLoading, setSapModuleLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [commentLoading, setCommentLoading] = useState(false);
+  const [ticketAuth, setTicketAuth] = useState<{
+    canAct: boolean;
+    reason?: string;
+    assignedSupportMatricule: string | null;
+    userMatricule: string | null;
+    userRole: string | null;
+  } | null>(null);
+  const [similarAssignees, setSimilarAssignees] = useState<any[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(true);
 
   useEffect(() => {
     if (id) {
       fetchTicketData();
       fetchEventLogs(id as string);
+      fetchSimilarAssignees(id as string);
     }
   }, [id]);
+
+  async function fetchSimilarAssignees(ticketId: string) {
+    setSimilarLoading(true);
+    try {
+      const res = await getSimilarAssigneesAction(ticketId);
+      setSimilarAssignees(res.assignees || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSimilarLoading(false);
+    }
+  }
 
   async function fetchTicketData() {
     setLoading(true);
@@ -62,14 +84,17 @@ export default function TicketDetailPage() {
       const ticketData = await getTicketById(id as string);
       if (ticketData) {
         setTicket(ticketData);
-        setSapModule(ticketData.sapModule || "");
-        if (ticketData.status === "validated" || ticketData.status === "approved" || ticketData.status === "analysis_pending" || ticketData.status === "sql_proposed") {
+        setSapModule((ticketData as any).sapModule || "");
+        if (ticketData.status === "validated" || ticketData.status === "analysis_pending" || ticketData.status === "sql_proposed") {
           const analysisRes = await getTicketAnalysisAction(id as string);
           if (analysisRes.success && analysisRes.analysis) {
             setAnalysis(analysisRes.analysis);
           }
         }
       }
+      // Fetch auth context for this ticket (role-based ownership check)
+      const authCtx = await getTicketAuthContextAction(id as string);
+      setTicketAuth(authCtx);
     } catch (err) {
       console.error(err);
     } finally {
@@ -174,7 +199,7 @@ export default function TicketDetailPage() {
     );
   }
 
-  const isValidated = ticket.status === "validated" || ticket.status === "approved";
+  const isValidated = ticket.status === "validated";
   const parsedValidation = isValidated && ticket.closeNotes ? JSON.parse(ticket.closeNotes) : null;
 
   return (
@@ -195,7 +220,7 @@ export default function TicketDetailPage() {
               <ArrowLeft className="w-2.5 h-2.5 group-hover:-translate-x-1 transition-transform" />
               Back
             </button>
-            
+
             <div className="flex items-center gap-3 flex-wrap">
               <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center shrink-0 shadow-lg ring-1 ring-white/20">
                 <Hash className="w-5 h-5 text-white" />
@@ -203,14 +228,13 @@ export default function TicketDetailPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-black text-white tracking-tight uppercase leading-none">{ticket.id}</h1>
-                  <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border backdrop-blur-md ${
-                    ticket.status === 'validated' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                  <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border backdrop-blur-md ${ticket.status === 'validated' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
                     ticket.status === 'pending' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                    ticket.status === 'analysis_pending' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' :
-                    ticket.status === 'sql_proposed' ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
-                    ticket.status === 'rejected' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
-                    'bg-white/10 text-slate-300 border-white/20'
-                  }`}>
+                      ticket.status === 'analysis_pending' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' :
+                        ticket.status === 'sql_proposed' ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
+                          ticket.status === 'rejected' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                            'bg-white/10 text-slate-300 border-white/20'
+                    }`}>
                     {STATUS_LABELS[ticket.status as keyof typeof STATUS_LABELS] || ticket.status}
                   </span>
                 </div>
@@ -226,12 +250,11 @@ export default function TicketDetailPage() {
           <div className="flex items-center gap-3 shrink-0 bg-white/5 p-2 rounded-xl border border-white/10 backdrop-blur-xl">
             <div className="flex flex-col items-end gap-0 px-2">
               <span className="text-[7px] font-black text-white/30 uppercase tracking-[0.2em]">Priority</span>
-              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                ticket.priority?.includes('1') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${ticket.priority?.includes('1') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
                 ticket.priority?.includes('2') ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
-                ticket.priority?.includes('3') ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                'bg-white/5 text-slate-400 border-white/10'
-              }`}>{ticket.priority}</span>
+                  ticket.priority?.includes('3') ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                    'bg-white/5 text-slate-400 border-white/10'
+                }`}>{ticket.priority}</span>
             </div>
             <div className="w-px h-8 bg-white/10" />
             <div className="flex items-center gap-2.5 px-2">
@@ -266,15 +289,14 @@ export default function TicketDetailPage() {
             <div className="absolute top-0 right-0 p-4 opacity-5">
               <Activity className="w-20 h-20 text-indigo-900" />
             </div>
-            
+
             <div className="p-4 relative z-10">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center shadow-inner">
                   <Activity className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Incident Narrative</h3>
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Data Payload</p>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Incident</h3>
                 </div>
               </div>
 
@@ -297,8 +319,8 @@ export default function TicketDetailPage() {
                       <Shield className="w-3 h-3" /> Metadata
                     </h5>
                     <div className="grid gap-2">
-                      <DetailItem label="Originator" value={ticket.openedBy} icon={<User className="w-3 h-3 text-indigo-400" />} />
-                      <DetailItem label="Timestamp" value={ticket.openedAt} icon={<Clock className="w-3 h-3 text-indigo-400" />} />
+                      <DetailItem label="Originator" value={ticket.openedBy || ""} icon={<User className="w-3 h-3 text-indigo-400" />} />
+                      <DetailItem label="Timestamp" value={ticket.openedAt || ""} icon={<Clock className="w-3 h-3 text-indigo-400" />} />
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -306,8 +328,8 @@ export default function TicketDetailPage() {
                       <Zap className="w-3 h-3" /> Operations
                     </h5>
                     <div className="grid gap-2">
-                      <DetailItem label="Team" value={ticket.team} icon={<Layers className="w-3 h-3 text-violet-400" />} />
-                      <DetailItem label="Assignee" value={ticket.assignedTo} icon={<User className="w-3 h-3 text-violet-400" />} />
+                      <DetailItem label="Team" value={ticket.team || ""} icon={<Layers className="w-3 h-3 text-violet-400" />} />
+                      <DetailItem label="Assignee" value={ticket.assignedTo || ""} icon={<User className="w-3 h-3 text-violet-400" />} />
                     </div>
                   </div>
                 </div>
@@ -339,6 +361,41 @@ export default function TicketDetailPage() {
                     </select>
                   </div>
                 </div>
+
+                {/* ─── Similar Ticket Assignees ─── */}
+                <div className="pt-4 mt-4 border-t border-slate-100">
+                  <h5 className="text-[9px] font-black text-slate-900 uppercase tracking-widest leading-none mb-3 flex items-center gap-1.5">
+                    <Layers className="w-3 h-3 text-indigo-500" />
+                    Similar Ticket Assignees
+                  </h5>
+                  {similarLoading ? (
+                    <div className="flex items-center gap-2 text-slate-400 p-2">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span className="text-[10px] font-bold">Finding experts...</span>
+                    </div>
+                  ) : similarAssignees.length === 0 ? (
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
+                      <p className="text-[10px] font-bold text-slate-400">No similar ticket assignees found.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                      {similarAssignees.map((assignee, idx) => (
+                        <div key={idx} className="flex items-center gap-3 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-xl hover:border-indigo-200 transition-colors">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-black text-indigo-600">{assignee.name.charAt(0)}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-bold text-slate-800 truncate">{assignee.name}</p>
+                            <p className="text-[9px] font-semibold text-slate-500 flex items-center gap-1">
+                              {assignee.matricule} &bull; <span className="text-indigo-600 font-bold">#{assignee.similar_ticket_number}</span>
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
           </div>
@@ -362,7 +419,7 @@ export default function TicketDetailPage() {
                 {ticket.comments && (
                   <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-5 shadow-inner relative group-hover:bg-white transition-colors">
                     <p className="text-[12px] font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">
-                      {ticket.comments.replace(/\\n/g, '\n').replace(/GHOST RESPONSE/g, 'FORS AGENT RESPONSE')}
+                      {ticket.comments.replace(/\\n/g, '\n').replace(/GHOST RESPONSE/g, 'FORS ASSISTANT RESPONSE')}
                     </p>
                   </div>
                 )}
@@ -381,7 +438,7 @@ export default function TicketDetailPage() {
                       className="px-4 py-2 bg-[#0A1628] text-white rounded-lg text-[9px] font-black uppercase tracking-[0.2em] flex items-center gap-2 hover:bg-indigo-600 transition-all shadow-xl shadow-slate-900/20 disabled:opacity-50 active:scale-95 ring-1 ring-white/10"
                     >
                       {commentLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                      Transmit
+                      Post
                     </button>
                   </div>
                 </div>
@@ -433,14 +490,24 @@ export default function TicketDetailPage() {
                       <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">S4/HANA Sandbox Environment</p>
                     </div>
                   </div>
-                  <button
-                    onClick={handleRunSqlPreview}
-                    disabled={sqlPreviewLoading}
-                    className="group bg-[#0A1628] hover:bg-indigo-600 text-white text-[9px] px-5 py-2.5 rounded-xl font-black uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2 ring-1 ring-white/10"
-                  >
-                    <RefreshCw className={clsx("w-3 h-3", sqlPreviewLoading && "animate-spin")} />
-                    {sqlPreviewLoading ? "Simulating..." : "Initiate Execution"}
-                  </button>
+                  {ticketAuth?.canAct ? (
+                    <button
+                      onClick={handleRunSqlPreview}
+                      disabled={sqlPreviewLoading}
+                      className="group bg-[#0A1628] hover:bg-indigo-600 text-white text-[9px] px-5 py-2.5 rounded-xl font-black uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2 ring-1 ring-white/10"
+                    >
+                      <RefreshCw className={clsx("w-3 h-3", sqlPreviewLoading && "animate-spin")} />
+                      {sqlPreviewLoading ? "Simulating..." : "Initiate Execution"}
+                    </button>
+                  ) : (
+                    <div
+                      title={ticketAuth?.reason || "Only the assigned support user can run SQL simulation"}
+                      className="flex items-center gap-2 bg-slate-100 text-slate-400 text-[9px] px-4 py-2.5 rounded-xl font-black uppercase tracking-[0.2em] cursor-not-allowed border border-slate-200"
+                    >
+                      <Lock className="w-3 h-3" />
+                      Restricted
+                    </div>
+                  )}
                 </div>
 
                 {sqlPreview ? (
@@ -514,14 +581,14 @@ export default function TicketDetailPage() {
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mt-1">Logs</p>
                 </div>
               </div>
-              <button 
-                onClick={() => fetchEventLogs(ticket.id)} 
+              <button
+                onClick={() => fetchEventLogs(ticket.id)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-all shadow-sm"
               >
                 <RefreshCw className={clsx("w-3.5 h-3.5", eventLogsLoading && 'animate-spin')} />
               </button>
             </div>
-            
+
             <div className="p-4 space-y-3 max-h-[320px] overflow-y-auto custom-scrollbar">
               {eventLogs.length > 0 ? eventLogs.map((log, idx) => (
                 <div key={idx} className="flex gap-3 group/log">
@@ -531,7 +598,7 @@ export default function TicketDetailPage() {
                   </div>
                   <div className="pb-3 flex-1 border-b border-slate-50 last:border-0">
                     <p className="text-[11px] font-black text-slate-700 leading-snug group-hover/log:text-indigo-900 transition-colors">
-                      {log.message.replace(/GHOST/g, 'FORS Agent')}
+                      {log.message.replace(/GHOST/g, 'FORS Assistant')}
                     </p>
                     <div className="flex items-center gap-3 mt-2">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
@@ -558,6 +625,9 @@ export default function TicketDetailPage() {
             onApprove={fetchTicketData}
             onReject={fetchTicketData}
             onReanalyze={handleReanalyze}
+            canAct={ticketAuth?.canAct ?? true}
+            restrictionReason={ticketAuth?.reason}
+            assignedSupportMatricule={ticketAuth?.assignedSupportMatricule}
           />
         </div>
       </div>

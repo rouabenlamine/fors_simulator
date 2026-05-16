@@ -4,6 +4,15 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["mysql2", "chromadb", "onnxruntime-node"],
   },
+  async rewrites() {
+    return [
+      {
+        // Map /s/[matricule]/path to /path
+        source: '/s/:sid/:path*',
+        destination: '/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;

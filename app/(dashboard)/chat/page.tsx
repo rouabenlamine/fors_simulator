@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getConversationsWithMeta } from "@/app/actions";
+import { getConversationsWithMeta, getSession } from "@/app/actions";
 import { MessageSquare, Clock, Bot, ChevronRight, Plus, Sparkles } from "lucide-react";
 import { DeleteConversationButton } from "@/components/chat/DeleteConversationButton";
 import { NewConversationButton } from "@/components/chat/NewConversationButton";
@@ -14,7 +14,12 @@ const PASTEL_PALETTES = [
 ];
 
 export default async function ChatPage() {
-  const conversations = await getConversationsWithMeta();
+  const [conversations, session] = await Promise.all([
+    getConversationsWithMeta(),
+    getSession()
+  ]);
+  
+  const sidPrefix = session.user?.matricule ? `/s/${session.user.matricule}` : "";
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-5">
@@ -34,7 +39,7 @@ export default async function ChatPage() {
             </p>
           </div>
         </div>
-        <NewConversationButton />
+        <NewConversationButton userMatricule={session.user?.matricule} />
       </div>
 
       {/* ── Conversation List ─────────────────────────────────────── */}
@@ -49,14 +54,14 @@ export default async function ChatPage() {
           {conversations.map((conv: any, i: number) => {
             const palette = PASTEL_PALETTES[i % PASTEL_PALETTES.length];
             const msgCount = Number(conv.messageCount) || 0;
-            const lastSender = conv.lastMessageRole === "AI" ? "FORS Agent" : (conv.userMatricule || "Agent");
+            const lastSender = conv.lastMessageRole === "AI" ? "FORS Assistant" : (conv.userMatricule || "Agent");
             const lastContent = conv.lastMessageContent || null;
             const lastTime = conv.lastMessageAt
               ? new Date(conv.lastMessageAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
               : "—";
 
             return (
-              <Link key={conv.conversationId} href={`/chat/${conv.ticketId}`}>
+              <Link key={conv.conversationId} href={`${sidPrefix}/chat/${conv.ticketId}`}>
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all duration-200 overflow-hidden group cursor-pointer">
                   <div className="flex items-center gap-4 p-4">
 

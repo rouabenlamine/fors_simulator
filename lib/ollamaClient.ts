@@ -186,6 +186,42 @@ Ticket: ${newTicket}`;
             parsed.suggested_sql = sanitizeSql(parsed.suggested_sql);
         }
 
+        // FIX 4: LLM Hallucination Recovery
+        // Sometimes the LLM fails to close the recommended_actions array properly and dumps the
+        // remaining JSON keys (like impacted_tables and suggested_sql) inside the last string.
+        if (parsed.recommended_actions && Array.isArray(parsed.recommended_actions)) {
+            const rawRecommendations = parsed.recommended_actions.join("\\n");
+            
+            // Extract leaked SQL if suggested_sql is empty or "-- No SQL generated"
+            if (!parsed.suggested_sql || parsed.suggested_sql.startsWith("--")) {
+                const sqlMatch = rawRecommendations.match(/suggested_sql["']?\s*:\s*["'](SELECT|INSERT|UPDATE|DELETE)[^"']+/i) 
+                              || rawRecommendations.match(/(SELECT|INSERT|UPDATE|DELETE)[^\n;]+;/i);
+                if (sqlMatch) {
+                    let extractedSql = sqlMatch[0].replace(/^suggested_sql["']?\s*:\s*["']/i, '');
+                    parsed.suggested_sql = sanitizeSql(extractedSql);
+                }
+            }
+
+            // Extract leaked impacted tables
+            if (!parsed.impacted_tables || parsed.impacted_tables.length === 0) {
+                const tablesMatch = rawRecommendations.match(/impacted_tables["']?\s*:\s*\[(.*?)\]/i);
+                if (tablesMatch && tablesMatch[1]) {
+                    parsed.impacted_tables = tablesMatch[1]
+                        .split(',')
+                        .map(t => t.replace(/['"\s]/g, '').trim())
+                        .filter(t => t.length > 0);
+                }
+            }
+
+            // Clean up the recommendation string by stripping out the leaked JSON
+            parsed.recommended_actions = parsed.recommended_actions.map(action => 
+                action.replace(/impacted_tables\s*:\s*\[[\s\S]*?\][\s\S]*/i, '')
+                      .replace(/suggested_sql\s*:\s*["'][\s\S]*/i, '')
+                      .replace(/\\n0\\n/g, '') // Common phi3 hallucination
+                      .trim()
+            ).filter(a => a.length > 0);
+        }
+
         return parsed;
     } catch (error: any) {
         const message =

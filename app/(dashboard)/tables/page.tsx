@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { getMenus, getTransactions, chatWithGostAction, logSqlExecutionAction } from "@/app/actions";
+import { getMenus, getTransactions, chatWithAssistantAction, logSqlExecutionAction } from "@/app/actions";
 import { PREDEFINED_QUERIES, QUERY_CATEGORIES, type QueryCategory, type PredefinedQuery } from "@/lib/predefined-queries";
 import {
   Database, Search, Bot, Send, Shield, ChevronRight,
@@ -100,7 +100,7 @@ export default function TablesPage() {
 
     try {
       const gHistory = chatMsgs.map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.content }));
-      const reply = await chatWithGostAction("GENERAL", msg, gHistory);
+      const reply = await chatWithAssistantAction("GENERAL", msg, gHistory);
       setTyping(false);
       setChatMsgs((prev) => [...prev, { role: "bot", content: reply, time: now() }]);
       

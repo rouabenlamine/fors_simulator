@@ -236,28 +236,28 @@ export async function getAuditLogsAction(filters?: {
   const params: any[] = [];
 
   if (role === "it_manager") {
-    conditions.push(`(user_matricule IN (SELECT matricule FROM users WHERE role = 'it_support') 
-      OR details LIKE '%"team":"IT Support"%' 
-      OR details LIKE '%IT Support%')`);
+    conditions.push(`(a.user_matricule IN (SELECT matricule FROM users WHERE role = 'it_support') 
+      OR a.details LIKE '%"team":"IT Support"%' 
+      OR a.details LIKE '%IT Support%')`);
   } else if (role === "admin") {
     // Admin sees everything except superadmin logs
-    conditions.push("user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')");
+    conditions.push("a.user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')");
   }
 
   if (filters?.userMatricule) {
-    conditions.push("user_matricule LIKE ?");
+    conditions.push("a.user_matricule LIKE ?");
     params.push(`%${filters.userMatricule}%`);
   }
   if (filters?.action) {
-    conditions.push("action = ?");
+    conditions.push("a.action = ?");
     params.push(filters.action);
   }
   if (filters?.dateFrom) {
-    conditions.push("created_at >= ?");
+    conditions.push("a.created_at >= ?");
     params.push(filters.dateFrom);
   }
   if (filters?.dateTo) {
-    conditions.push("created_at <= ?");
+    conditions.push("a.created_at <= ?");
     params.push(filters.dateTo + " 23:59:59");
   }
 
@@ -265,7 +265,7 @@ export async function getAuditLogsAction(filters?: {
   const limit = filters?.limit || 200;
 
   const rows = await query<any>(
-    `SELECT id, user_matricule, action, details, created_at FROM audit_logs ${where} ORDER BY created_at DESC LIMIT ?`,
+    `SELECT a.id, a.user_matricule, a.action, a.details, a.created_at, u.name, u.surname FROM audit_logs a LEFT JOIN users u ON a.user_matricule = u.matricule ${where} ORDER BY a.created_at DESC LIMIT ?`,
     [...params, limit]
   );
   return JSON.parse(JSON.stringify(rows));
@@ -487,18 +487,40 @@ export async function createKpiConfigAction(data: {
   return { success: true, id };
 }
 
+export async function deleteKpiConfigAction(id: string) {
+  const session = await requireAdmin();
+  
+  await execute(`DELETE FROM kpi_configs WHERE id = ?`, [id]);
+  
+  await logActivity("KPI_UPDATED", {
+    userMatricule: session.user!.matricule,
+    details: { message: `Deleted KPI ${id}`, id }
+  });
+  
+  revalidatePath("/admin/kpi-config");
+  return { success: true };
+}
+
 // ───────────────────────────────────────────────
 //  ADMIN DASHBOARD STATS
 // ───────────────────────────────────────────────
 
 export async function getAdminDashboardStats() {
-  const [sessionsRes] = await query<any>("SELECT COUNT(*) as count FROM sessions WHERE expires_at > NOW()");
+  const session = await getSession();
+  const callerRole = session.user?.role;
+  const isSuperadmin = callerRole === "superadmin";
+
+  // Exclude superadmin users from counts when caller is a regular admin
+  const userFilter = isSuperadmin ? "" : " WHERE role != 'superadmin'";
+  const auditFilter = isSuperadmin ? "" : " AND user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')";
+
+  const [sessionsRes] = await query<any>(`SELECT COUNT(*) as count FROM sessions WHERE expires_at > NOW()${isSuperadmin ? "" : " AND user_matricule NOT IN (SELECT matricule FROM users WHERE role = 'superadmin')"}`);
   const activeConnections = sessionsRes?.count || 0;
 
-  const [sqlRunsRes] = await query<any>("SELECT COUNT(*) as count FROM audit_logs WHERE action = 'RAW_SQL_EXECUTED' AND DATE(created_at) = CURDATE()");
+  const [sqlRunsRes] = await query<any>(`SELECT COUNT(*) as count FROM audit_logs WHERE action = 'RAW_SQL_EXECUTED' AND DATE(created_at) = CURDATE()${auditFilter}`);
   const sqlRuns = sqlRunsRes?.count || 0;
 
-  const [totalUsersRes] = await query<any>("SELECT COUNT(*) as count FROM users");
+  const [totalUsersRes] = await query<any>(`SELECT COUNT(*) as count FROM users${userFilter}`);
   const totalUsers = totalUsersRes?.count || 0;
 
   const [totalTicketsRes] = await query<any>("SELECT COUNT(*) as count FROM tickets");
@@ -507,9 +529,9 @@ export async function getAdminDashboardStats() {
   const [pendingTicketsRes] = await query<any>("SELECT COUNT(*) as count FROM tickets WHERE state NOT IN ('Closed', 'Validated', 'Canceled')");
   const pendingTickets = pendingTicketsRes?.count || 0;
 
-  const anomalies = await query<any>("SELECT * FROM audit_logs WHERE action IN ('RAW_SQL_FAILED', 'TICKET_REJECTED') ORDER BY created_at DESC LIMIT 5");
+  const anomalies = await query<any>(`SELECT * FROM audit_logs WHERE action IN ('RAW_SQL_FAILED', 'TICKET_REJECTED')${auditFilter} ORDER BY created_at DESC LIMIT 5`);
 
-  return { activeConnections, sqlRuns, totalUsers, totalTickets, pendingTickets, anomalies };
+  return { activeConnections, sqlRuns, totalUsers, totalTickets, pendingTickets, anomalies, userMatricule: session.user!.matricule };
 }
 
 // ───────────────────────────────────────────────
@@ -675,7 +697,7 @@ export async function getTeamKpisAction() {
       return k;
     });
     
-    const results = [];
+    const results: any[] = [];
     
     for (const kpi of kpis) {
       try {
@@ -842,36 +864,56 @@ export async function getTeamMembersAction() {
 //  IT REPORT — Dynamic KPI Data (Section 7)
 // ───────────────────────────────────────────────
 
-export async function getReportKpisAction() {
+export async function getReportKpisAction(dateFrom?: string, dateTo?: string) {
   try {
     const session = await getSession();
     const role = session.user?.role;
     let groupFilter = "";
     if (role === "it_manager") {
-      groupFilter = " WHERE assignment_group = 'IT Support'";
+      groupFilter = "assignment_group = 'IT Support'";
     }
 
+    let dateFilter = "";
+    if (dateFrom && dateTo) {
+      dateFilter = `sys_created_on >= '${dateFrom} 00:00:00' AND sys_created_on <= '${dateTo} 23:59:59'`;
+    } else if (dateFrom) {
+      dateFilter = `sys_created_on >= '${dateFrom} 00:00:00'`;
+    } else if (dateTo) {
+      dateFilter = `sys_created_on <= '${dateTo} 23:59:59'`;
+    }
+
+    const conditions: string[] = [];
+    if (groupFilter) conditions.push(groupFilter);
+    if (dateFilter) conditions.push(dateFilter);
+
+    const whereClause = conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "";
+    const andClause = conditions.length > 0 ? " AND " + conditions.join(" AND ") : "";
+
     // Core ticket metrics
-    const [totalRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets${groupFilter}`);
-    const [closedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state IN ('Closed', 'Validated')`);
-    const [pendingRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state NOT IN ('Closed', 'Validated', 'Canceled', 'Rejected')`);
-    const [rejectedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Rejected'`);
-    const [canceledRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Canceled'`);
-    const [sqlProposedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'SQL Proposed'`);
-    const [validatedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Validated'`);
-    const [analysisPendingRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets ${groupFilter ? groupFilter + " AND" : "WHERE"} state = 'Analysis Pending'`);
+    const [totalRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets${whereClause}`);
+    const [closedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets WHERE state IN ('Closed', 'Validated')${andClause}`);
+    const [pendingRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets WHERE state NOT IN ('Closed', 'Validated', 'Canceled', 'Rejected')${andClause}`);
+    const [rejectedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets WHERE state = 'Rejected'${andClause}`);
+    const [canceledRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets WHERE state = 'Canceled'${andClause}`);
+    const [sqlProposedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets WHERE state = 'SQL Proposed'${andClause}`);
+    const [validatedRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets WHERE state = 'Validated'${andClause}`);
+    const [analysisPendingRes] = await query<any>(`SELECT COUNT(*) as c FROM tickets WHERE state = 'Analysis Pending'${andClause}`);
 
     // Priority distribution
     const priorityRows = await query<any>(
-      `SELECT priority, COUNT(*) as c FROM tickets ${groupFilter} GROUP BY priority ORDER BY priority`
+      `SELECT priority, COUNT(*) as c FROM tickets ${whereClause} GROUP BY priority ORDER BY priority`
     );
 
     // Team distribution
     const teamRows = await query<any>(
-      `SELECT assignment_group as team, COUNT(*) as c FROM tickets ${groupFilter} GROUP BY assignment_group ORDER BY c DESC`
+      `SELECT assignment_group as team, COUNT(*) as c FROM tickets ${whereClause} GROUP BY assignment_group ORDER BY c DESC`
     );
 
     // Monthly trend (last 6 months)
+    let monthlyTrendWhere = `WHERE sys_created_on >= DATE_SUB(NOW(), INTERVAL 6 MONTH)`;
+    if (groupFilter) monthlyTrendWhere += ` AND ${groupFilter}`;
+    if (dateFilter) monthlyTrendWhere += ` AND ${dateFilter}`;
+
     const monthlyRows = await query<any>(`
       SELECT 
         DATE_FORMAT(sys_created_on, '%Y-%m') as month,
@@ -879,20 +921,32 @@ export async function getReportKpisAction() {
         SUM(CASE WHEN state IN ('Closed','Validated') THEN 1 ELSE 0 END) as resolved,
         SUM(CASE WHEN state = 'Rejected' THEN 1 ELSE 0 END) as rejected
       FROM tickets 
-      WHERE sys_created_on >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-      ${groupFilter ? "AND assignment_group = 'IT Support'" : ""}
+      ${monthlyTrendWhere}
       GROUP BY DATE_FORMAT(sys_created_on, '%Y-%m')
       ORDER BY month ASC
     `);
 
     // AI analysis stats
+    let aiJoin = "";
+    let aiWhere = "";
+    if (groupFilter || dateFilter) {
+      aiJoin = "JOIN tickets t ON t.number = a.incident_number";
+      const aiConds: string[] = [];
+      if (groupFilter) aiConds.push(`t.${groupFilter}`);
+      if (dateFilter) aiConds.push(`t.${dateFilter}`);
+      aiWhere = " WHERE " + aiConds.join(" AND ");
+    }
+
     const [aiAnalysisRes] = await query<any>(`
       SELECT COUNT(*) as c FROM ai_analysis a
-      ${groupFilter ? "JOIN tickets t ON t.number = a.incident_number WHERE t.assignment_group = 'IT Support'" : ""}
+      ${aiJoin} ${aiWhere}
     `);
+    
+    let avgConfWhere = aiWhere ? `${aiWhere} AND a.confidence_score > 0` : `WHERE a.confidence_score > 0`;
+
     const [avgConfRes] = await query<any>(`
-      SELECT AVG(confidence_score) as avg_conf FROM ai_analysis a
-      ${groupFilter ? "JOIN tickets t ON t.number = a.incident_number WHERE t.assignment_group = 'IT Support' AND" : "WHERE"} confidence_score > 0
+      SELECT AVG(a.confidence_score) as avg_conf FROM ai_analysis a
+      ${aiJoin} ${avgConfWhere}
     `);
 
     // Users count
@@ -907,7 +961,7 @@ export async function getReportKpisAction() {
         COUNT(*) as total,
         SUM(CASE WHEN state IN ('Closed', 'Validated') THEN 1 ELSE 0 END) as resolved
       FROM tickets 
-      ${groupFilter ? groupFilter + " AND" : "WHERE"} assigned_to IS NOT NULL
+      WHERE assigned_to IS NOT NULL ${andClause}
       GROUP BY assigned_to 
       ORDER BY total DESC 
       LIMIT 10

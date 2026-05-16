@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageSquare, X, Send, Bot, Hash } from "lucide-react";
 import type { User } from "@/lib/types";
 import { usePathname, useSearchParams } from "next/navigation";
-import { chatWithAgentAction } from "@/app/actions";
+import { chatWithAssistantAction } from "@/app/actions";
 import { clsx } from "clsx";
 
 interface ChatBubbleProps {
@@ -87,7 +87,7 @@ export function ChatBubble({ user }: ChatBubbleProps) {
         sender: "agent",
         content: pageTicketId
           ? `Hello! Context loaded for Ticket ${pageTicketId}. How can I assist you?`
-          : "Hello! I am the FORS Agent. Mention an INC number to link a ticket, or ask me anything.",
+          : "Hello! I am the FORS Assistant. Mention an INC number to link a ticket, or ask me anything.",
         time: now(),
       };
       setMessages([welcome]);
@@ -166,14 +166,14 @@ export function ChatBubble({ user }: ChatBubbleProps) {
           role: m.sender === "agent" ? "assistant" : "user",
           content: m.content,
         }));
-      const reply = await chatWithAgentAction(resolvedTicketId, input, gHistory);
+      const reply = await chatWithAssistantAction(resolvedTicketId, input, gHistory);
       setMessages((prev) => [...prev, { sender: "agent", content: reply, time: now() }]);
     } catch {
       setMessages((prev) => [
         ...prev,
         {
           sender: "agent",
-          content: "I'm having trouble connecting to the neural link. Is your local FORS Agent running?",
+          content: "I'm having trouble connecting to the neural link. Is your local FORS Assistant running?",
           time: now(),
         },
       ]);
@@ -212,7 +212,7 @@ export function ChatBubble({ user }: ChatBubbleProps) {
                 <div className="absolute inset-0 w-2 h-2 bg-emerald-400 rounded-full animate-ping opacity-75" />
               </div>
               <Bot className="w-4 h-4 text-white/80" />
-              <span className="text-[13px] font-black text-white tracking-tight uppercase">FORS Agent</span>
+              <span className="text-[13px] font-black text-white tracking-tight uppercase">FORS Assistant</span>
               <span className="text-[9px] bg-white/20 text-white px-1.5 py-0.5 rounded-lg font-black uppercase tracking-widest ml-1 backdrop-blur-md">AI</span>
             </div>
             <div className="flex items-center gap-2">

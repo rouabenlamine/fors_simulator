@@ -8,7 +8,7 @@ import {
   RefreshCw, Check, Search, Ticket as TicketIcon,
   ArrowUpDown, Clock, Loader2, X
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { STATUS_LABELS, STATUS_COLORS } from "@/lib/constants";
 import { clsx } from "clsx";
 
@@ -23,21 +23,21 @@ const PRIORITIES: TicketPriority[] = [
 ];
 
 const PRIORITY_PASTEL: Record<TicketPriority, { bg: string; text: string; dot: string; ring: string }> = {
-  "1 - Critical": { bg: "bg-rose-50",   text: "text-rose-600",   dot: "bg-rose-400",   ring: "ring-rose-200"   },
-  "2 - High":     { bg: "bg-orange-50", text: "text-orange-600", dot: "bg-orange-400", ring: "ring-orange-200" },
+  "1 - Critical": { bg: "bg-rose-50", text: "text-rose-600", dot: "bg-rose-400", ring: "ring-rose-200" },
+  "2 - High": { bg: "bg-orange-50", text: "text-orange-600", dot: "bg-orange-400", ring: "ring-orange-200" },
   "3 - Moderate": { bg: "bg-violet-50", text: "text-violet-600", dot: "bg-violet-400", ring: "ring-violet-200" },
-  "4 - Low":      { bg: "bg-sky-50",    text: "text-sky-600",    dot: "bg-sky-400",    ring: "ring-sky-200"    },
-  "5 - Planning": { bg: "bg-fuchsia-50",text: "text-fuchsia-600",dot: "bg-fuchsia-400",ring: "ring-fuchsia-200"},
+  "4 - Low": { bg: "bg-sky-50", text: "text-sky-600", dot: "bg-sky-400", ring: "ring-sky-200" },
+  "5 - Planning": { bg: "bg-fuchsia-50", text: "text-fuchsia-600", dot: "bg-fuchsia-400", ring: "ring-fuchsia-200" },
 };
 
 const STATUS_PASTEL: Record<string, { bg: string; text: string; ring: string }> = {
-  pending:          { bg: "bg-amber-50",  text: "text-amber-700",  ring: "ring-amber-200"  },
+  pending: { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200" },
   analysis_pending: { bg: "bg-indigo-50", text: "text-indigo-700", ring: "ring-indigo-200" },
-  sql_proposed:     { bg: "bg-sky-50",    text: "text-sky-700",    ring: "ring-sky-200"    },
-  validated:        { bg: "bg-emerald-50",text: "text-emerald-700",ring: "ring-emerald-200"},
-  rejected:         { bg: "bg-rose-50",   text: "text-rose-700",   ring: "ring-rose-200"   },
-  closed:           { bg: "bg-green-50",  text: "text-green-700",  ring: "ring-green-200"  },
-  canceled:         { bg: "bg-slate-100", text: "text-slate-500",  ring: "ring-slate-200"  },
+  sql_proposed: { bg: "bg-sky-50", text: "text-sky-700", ring: "ring-sky-200" },
+  validated: { bg: "bg-emerald-50", text: "text-emerald-700", ring: "ring-emerald-200" },
+  rejected: { bg: "bg-rose-50", text: "text-rose-700", ring: "ring-rose-200" },
+  closed: { bg: "bg-green-50", text: "text-green-700", ring: "ring-green-200" },
+  canceled: { bg: "bg-slate-100", text: "text-slate-500", ring: "ring-slate-200" },
 };
 
 function StatusBadge({ status }: { status: TicketStatus }) {
@@ -80,6 +80,8 @@ function KpiCard({
 
 export default function TicketsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const sidPrefix = pathname.match(/^\/s\/[^\/]+/)?.[0] || "";
   const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -151,23 +153,23 @@ export default function TicketsPage() {
   });
 
   const counts: Record<TabKey, number> = {
-    all:              allTickets.length,
-    pending:          allTickets.filter((t) => t.status === "pending").length,
-    canceled:         allTickets.filter((t) => t.status === "canceled").length,
-    closed:           allTickets.filter((t) => t.status === "closed").length,
-    sql_proposed:     allTickets.filter((t) => t.status === "sql_proposed").length,
-    validated:        allTickets.filter((t) => t.status === "validated").length,
-    rejected:         allTickets.filter((t) => t.status === "rejected").length,
+    all: allTickets.length,
+    pending: allTickets.filter((t) => t.status === "pending").length,
+    canceled: allTickets.filter((t) => t.status === "canceled").length,
+    closed: allTickets.filter((t) => t.status === "closed").length,
+    sql_proposed: allTickets.filter((t) => t.status === "sql_proposed").length,
+    validated: allTickets.filter((t) => t.status === "validated").length,
+    rejected: allTickets.filter((t) => t.status === "rejected").length,
     analysis_pending: allTickets.filter((t) => t.status === "analysis_pending").length,
   };
 
   const STATUS_FILTER_OPTIONS: { key: TicketStatus; label: string; dot: string }[] = [
-    { key: "pending",          label: "Pending",          dot: "bg-amber-400"  },
+    { key: "pending", label: "Pending", dot: "bg-amber-400" },
     { key: "analysis_pending", label: "Pending Analysis", dot: "bg-indigo-400" },
-    { key: "validated",        label: "Validated",        dot: "bg-emerald-400"},
-    { key: "rejected",         label: "Rejected",         dot: "bg-rose-400"   },
-    { key: "closed",           label: "Closed",           dot: "bg-green-400"  },
-    { key: "canceled",         label: "Canceled",         dot: "bg-slate-300"  },
+    { key: "validated", label: "Validated", dot: "bg-emerald-400" },
+    { key: "rejected", label: "Rejected", dot: "bg-rose-400" },
+    { key: "closed", label: "Closed", dot: "bg-green-400" },
+    { key: "canceled", label: "Canceled", dot: "bg-slate-300" },
   ];
 
   return (
@@ -186,7 +188,7 @@ export default function TicketsPage() {
             <div className="flex items-center gap-2 mt-0.5">
               <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Real-time Ingestion Active
+                Real-time Ingestion
               </p>
             </div>
           </div>
@@ -380,7 +382,7 @@ export default function TicketsPage() {
                   searched.map((ticket, idx) => (
                     <tr
                       key={ticket.id}
-                      onClick={() => router.push(`/tickets/${ticket.id}`)}
+                      onClick={() => router.push(`${sidPrefix}/tickets/${ticket.id}`)}
                       className={clsx(
                         "group cursor-pointer border-b border-slate-100/80 transition-all duration-150 last:border-0",
                         idx % 2 === 0 ? "bg-white hover:bg-indigo-50/40" : "bg-slate-50/40 hover:bg-indigo-50/40"

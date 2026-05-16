@@ -11,7 +11,7 @@ import {
 import { getAuditLogsAction, getAuditActionTypes } from "@/app/actions/admin-actions";
 import { translateJsonToNarratives } from "@/lib/translation";
 
-export default function AuditLogsPage() {
+export default function SuperadminAuditLogsPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [actionTypes, setActionTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,10 +89,10 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
-      {/* Main Card with Glassmorphism - Removed heavy shadow to fix brown artifact */}
+      {/* Main Card with Glassmorphism */}
       <div className="bg-white/40 rounded-[2.5rem] border border-white/80 overflow-hidden ">
 
-        {/* Filters Panel - Stacked for cleaner layout */}
+        {/* Filters Panel */}
         <div className="px-6 py-5 border-b border-slate-100 space-y-4">
           {/* Top Row: Title & Inline Filters */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -154,7 +154,7 @@ export default function AuditLogsPage() {
           </div>
         </div>
 
-        {/* Table Area - Structured & Color-coded */}
+        {/* Table Area */}
         <div className="w-full">
           <table className="w-full text-left table-fixed border-separate border-spacing-y-[2px]">
             <thead>

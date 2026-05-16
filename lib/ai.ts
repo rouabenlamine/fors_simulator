@@ -147,7 +147,7 @@ export async function generateAnalysisWithOllama(
   }
 }
 
-// ─── FORS Agent Chat Response ────────────────────────────────────────────────
+// ─── FORS Assistant Chat Response ────────────────────────────────────────────────
 
 const OFF_TOPIC_REPLY =
   "I can only answer questions about this specific ticket. Please ask something related to the incident, its diagnosis, or its resolution.";
@@ -201,7 +201,7 @@ ${ticketContext.suggested_sql ? `  AI SQL Proposal: ${ticketContext.suggested_sq
 ${ticketContext.resolution_steps ? `  AI Resolution  : ${ticketContext.resolution_steps}` : ""}`;
   }
 
-  const systemPrompt = `You are FORS Agent, the FORS IT support assistant, operating inside an incident ticket session.
+  const systemPrompt = `You are FORS Assistant, the FORS IT support assistant, operating inside an incident ticket session.
 
 Your job is to help the user investigate, understand, and resolve the ACTIVE TICKET. You are a technical expert.
 
@@ -248,7 +248,7 @@ ${ticketBlock}`;
 
     if (!response.ok) {
       console.error(`[Ollama Chat] Server error: ${response.status}`);
-      return "FORS Agent chat service temporarily unavailable. Please try again.";
+      return "FORS Assistant chat service temporarily unavailable. Please try again.";
     }
 
     const data = await response.json();
@@ -286,6 +286,6 @@ ${ticketBlock}`;
       ? "Chat request timed out"
       : err.message || "Unknown error";
     console.error("[getAgentChatResponse] Error:", message);
-    return `FORS Agent offline. Please check your local AI server (run \`ollama serve\` with phi3 model).`;
+    return `FORS Assistant offline. Please check your local AI server (run \`ollama serve\` with phi3 model).`;
   }
 }

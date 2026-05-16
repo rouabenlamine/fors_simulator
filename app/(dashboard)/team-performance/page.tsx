@@ -137,7 +137,7 @@ const CustomDefs = () => (
 );
 
 // ─── Main Dashboard ─────────────────────────────────────────────
-export default function KpiDashboard() {
+export default function TeamPerformanceDashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChart, setSelectedChart] = useState<any>(null);
@@ -623,9 +623,9 @@ export default function KpiDashboard() {
           </div>
           <div>
             <h1 className="text-lg font-black text-slate-800 tracking-tight">
-              KPIs & <span className="text-indigo-500">Statistics</span>
+              Team <span className="text-indigo-500">Performance</span>
             </h1>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 whitespace-nowrap">Track system stats and historical data.</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 whitespace-nowrap">Track team progress and daily results.</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -727,7 +727,7 @@ export default function KpiDashboard() {
             className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
-            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white relative overflow-hidden shrink-0">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white relative overflow-hidden shrink-0">
               <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="flex items-center gap-4 relative z-10">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/30">

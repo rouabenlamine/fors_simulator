@@ -24,6 +24,40 @@ const notifConfig = {
   warning: { icon: Clock,         color: "text-amber-500",  bg: "bg-amber-50",  bar: "bg-amber-400",  ring: "ring-amber-100"  },
 };
 
+function playNotificationSound() {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    
+    // First gentle chime (C5)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+    gain1.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start();
+    osc1.stop(ctx.currentTime + 0.4);
+
+    // Second gentle chime (E5)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+    gain2.gain.setValueAtTime(0.05, ctx.currentTime + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(ctx.currentTime + 0.1);
+    osc2.stop(ctx.currentTime + 0.5);
+  } catch (e) {
+    // Ignore if audio isn't supported or allowed by browser policy
+  }
+}
+
 export function Header({ title, user, viewPermissions }: HeaderProps) {
   const router = useRouter();
   const showNotifications = Boolean(user && user.role === "it_support");
@@ -66,6 +100,7 @@ export function Header({ title, user, viewPermissions }: HeaderProps) {
           const absoluteLatest = allFetched[0];
           if (lastNotifId && absoluteLatest.id !== lastNotifId && !dismissedIds.includes(absoluteLatest.id)) {
             setShowToast(absoluteLatest);
+            playNotificationSound();
             setTimeout(() => setShowToast(null), 8000);
           }
           setLastNotifId(absoluteLatest.id);
@@ -186,7 +221,8 @@ export function Header({ title, user, viewPermissions }: HeaderProps) {
                         <div
                           key={n.id}
                           onClick={() => {
-                            router.push(`/tickets/${n.linkId}`);
+                            const sidPrefix = user?.matricule ? `/s/${user.matricule}` : "";
+                            router.push(`${sidPrefix}/tickets/${n.linkId}`);
                             setNotifOpen(false);
                           }}
                           className={clsx(
@@ -260,7 +296,8 @@ export function Header({ title, user, viewPermissions }: HeaderProps) {
         <div
           className="fixed bottom-6 right-6 z-[100] animate-in slide-in-from-right-8 duration-300 pointer-events-auto"
           onClick={() => {
-            router.push(`/tickets/${showToast.linkId}`);
+            const sidPrefix = user?.matricule ? `/s/${user.matricule}` : "";
+            router.push(`${sidPrefix}/tickets/${showToast.linkId}`);
             setShowToast(null);
           }}
         >

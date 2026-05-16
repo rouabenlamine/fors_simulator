@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
-import { chatWithAgentAction } from "@/app/actions";
+import { chatWithAssistantAction } from "@/app/actions";
 
 interface ChatWindowProps {
   ticketId: string;
@@ -39,7 +39,7 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
 
     try {
       const gHistory = messages.map(m => ({ role: m.role === 'AI' ? 'assistant' : 'user', content: m.content }));
-      const replyContent = await chatWithAgentAction(ticketId, input, gHistory);
+      const replyContent = await chatWithAssistantAction(ticketId, input, gHistory);
 
       const gostReply: ChatMessage = {
         id: String(Date.now() + 1),
@@ -47,7 +47,7 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
         role: "AI",
         content: replyContent,
         createdAt: new Date().toISOString(),
-        senderName: "FORS Agent",
+        senderName: "FORS Assistant",
       };
 
       setMessages((prev) => [...prev, gostReply]);
@@ -76,7 +76,7 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
           <Bot className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-black text-slate-800 tracking-tight">FORS Agent</p>
+          <p className="text-sm font-black text-slate-800 tracking-tight">FORS Assistant</p>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
             <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Active · Ticket #{ticketId}</span>
@@ -91,7 +91,7 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
             <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
               <Sparkles className="w-7 h-7 text-indigo-400" />
             </div>
-            <p className="text-sm font-bold text-slate-500">Start a conversation with FORS Agent</p>
+            <p className="text-sm font-bold text-slate-500">Start a conversation with FORS Assistant</p>
             <p className="text-xs text-slate-400 max-w-xs">Ask about the incident, request analysis, or discuss resolution steps.</p>
           </div>
         )}
@@ -152,7 +152,7 @@ export function ChatWindow({ ticketId, initialMessages, currentUser = "You" }: C
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Message FORS Agent…"
+          placeholder="Message FORS Assistant…"
           className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
         />
         <button
